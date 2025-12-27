@@ -1,13 +1,139 @@
+//C:\PortfoliMe\portfoli_me\src\pages\public\Login.jsx
+
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { doc, getDoc } from "firebase/firestore"; // Added for DB check
+import { db } from "../../lib/firebase"; // Added DB instance
+import { useAuth } from "../../context/AuthContext";
+import OnboardingModal from "../../modals/OnboardingModal";
+import ErrorModal from "../../modals/ErrorModal";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, X } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
+
+  // Get all auth functions
+  const {
+    googleSignIn,
+    githubSignIn,
+    twitterSignIn,
+    login,
+    resetPassword,
+    currentUser,
+  } = useAuth();
+
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isExiting, setIsExiting] = useState(false); // New state for exit animation
+  const [isExiting, setIsExiting] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });
+
+  // New State for Modals
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [errorModal, setErrorModal] = useState({
+    show: false,
+    title: "",
+    message: "",
+  });
+
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    try {
+      const result = await googleSignIn();
+      const user = result.user;
+
+      // Check if user profile already exists
+      const docRef = doc(db, "users", user.uid);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        // User exists, go straight to home
+        navigate("/demo_user/home");
+      } else {
+        // New user, show onboarding
+        setShowOnboarding(true);
+      }
+    } catch (error) {
+      console.error("Google Sign In Failed", error);
+      setErrorModal({
+        show: true,
+        title: "Authentication Failed",
+        message: error.message,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGithubLogin = async () => {
+    setIsLoading(true);
+    try {
+      const result = await githubSignIn();
+      const user = result.user;
+
+      // Check if user profile already exists
+      const docRef = doc(db, "users", user.uid);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        navigate("/demo_user/home");
+      } else {
+        setShowOnboarding(true);
+      }
+    } catch (error) {
+      console.error("GitHub Sign In Failed", error);
+
+      // Handle specific Firebase error for duplicate emails
+      if (error.code === "auth/account-exists-with-different-credential") {
+        setErrorModal({
+          show: true,
+          title: "Account Conflict",
+          message:
+            "An account already exists with this email address but uses a different sign-in method (like Google). Please sign in using the original provider.",
+        });
+      } else {
+        setErrorModal({
+          show: true,
+          title: "Authentication Error",
+          message: error.message,
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTwitterLogin = async () => {
+    setIsLoading(true);
+    try {
+      const result = await twitterSignIn();
+      const user = result.user;
+
+      // Check if user profile already exists
+      const docRef = doc(db, "users", user.uid);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        navigate("/demo_user/home");
+      } else {
+        setShowOnboarding(true);
+      }
+    } catch (error) {
+      console.error("Twitter/X Sign In Failed", error);
+      setErrorModal({
+        show: true,
+        title: "Authentication Error",
+        message: error.message,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Called after Modal saves data successfully
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+    navigate("/demo_user/home");
+  };
 
   // Handle smooth transition back to Home
   const handleHomeNavigation = () => {
@@ -17,18 +143,67 @@ export default function Login() {
     }, 800); // Wait for fade-out before switching URL
   };
 
-  const handleLogin = (e) => {
+  const handleForgotPassword = async () => {
+    if (!formData.email) {
+      setErrorModal({
+        show: true,
+        title: "Email Required",
+        message:
+          "Please enter your email address first to reset your password.",
+      });
+      return;
+    }
+
+    try {
+      await resetPassword(formData.email);
+      // Re-using ErrorModal as a Success/Info modal for now to keep it simple
+      setErrorModal({
+        show: true,
+        title: "Email Sent",
+        message: "Check your inbox for password reset instructions.",
+      });
+    } catch (error) {
+      setErrorModal({
+        show: true,
+        title: "Error",
+        message: error.message,
+      });
+    }
+  };
+
+  const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+
+    try {
+      // 1. Authenticate with Firebase
+      const userCredential = await login(formData.email, formData.password);
+      const user = userCredential.user;
+
+      // 2. Check if user profile exists in Firestore
+      const docRef = doc(db, "users", user.uid);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        navigate("/demo_user/home");
+      } else {
+        // Logged in but no profile data -> Onboarding
+        setShowOnboarding(true);
+      }
+    } catch (error) {
+      console.error("Login Error:", error);
+      setErrorModal({
+        show: true,
+        title: "Login Failed",
+        message: "Invalid email or password. Please try again.",
+      });
+    } finally {
       setIsLoading(false);
-      navigate("/demo_user/home"); // Temporary redirect for testing
-    }, 1500);
+    }
   };
 
   return (
-    <div className="h-screen bg-[#020617] text-white font-sans selection:bg-orange-500 selection:text-white flex items-center justify-center overflow-hidden relative p-[80px]">
+    <div className="h-screen bg-[#00030f] text-white font-sans selection:bg-orange-500 selection:text-white flex items-center justify-center overflow-hidden relative p-[80px]">
       {/* --- EXIT TRANSITION OVERLAY (Simple Fade Out) --- */}
       <div
         className={`fixed inset-0 z-[200] bg-[#020617] pointer-events-none transition-opacity duration-700 ease-in-out ${
@@ -98,7 +273,7 @@ export default function Login() {
       </button>
 
       {/* Content Container with Border */}
-      <div className="w-full max-w-[1200px] aspect-video relative flex overflow-hidden border border-orange-500/20 rounded-3xl shadow-2xl">
+      <div className="w-full max-w-[1200px] aspect-video relative flex overflow-hidden border border-orange-500/20 rounded-3xl shadow-2xl bg-[#020617]">
         {/* --- LEFT SIDE: IMAGE & BRANDING --- */}
         <div className="hidden lg:flex flex-col justify-between w-1/2 relative overflow-hidden bg-[#0B1120]">
           {/* Background Image with Overlay */}
@@ -194,6 +369,7 @@ export default function Login() {
                 {/* Google */}
                 <button
                   type="button"
+                  onClick={handleGoogleLogin}
                   className="group relative w-full bg-[#020617] border border-white/10 text-white font-medium py-3 rounded-xl transition-all duration-300 hover:bg-white/5 active:scale-[0.98] flex items-center justify-center overflow-hidden"
                 >
                   <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[2px] w-0 bg-gradient-to-r from-transparent via-blue-500 to-transparent transition-all duration-500 ease-out group-hover:w-full"></div>
@@ -220,6 +396,7 @@ export default function Login() {
                 {/* GitHub */}
                 <button
                   type="button"
+                  onClick={handleGithubLogin}
                   className="group relative w-full bg-[#020617] border border-white/10 text-white font-medium py-3 rounded-xl transition-all duration-300 hover:bg-white/5 active:scale-[0.98] flex items-center justify-center overflow-hidden"
                 >
                   <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[2px] w-0 bg-gradient-to-r from-transparent via-purple-500 to-transparent transition-all duration-500 ease-out group-hover:w-full"></div>
@@ -250,6 +427,7 @@ export default function Login() {
                 {/* X (Twitter) */}
                 <button
                   type="button"
+                  onClick={handleTwitterLogin}
                   className="group relative w-full bg-[#020617] border border-white/10 text-white font-medium py-3 rounded-xl transition-all duration-300 hover:bg-white/5 active:scale-[0.98] flex items-center justify-center overflow-hidden"
                 >
                   <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[2px] w-0 bg-gradient-to-r from-transparent via-white to-transparent transition-all duration-500 ease-out group-hover:w-full"></div>
@@ -307,6 +485,7 @@ export default function Login() {
                     </label>
                     <button
                       type="button"
+                      onClick={handleForgotPassword}
                       className="text-xs text-orange-500 hover:text-orange-400 transition-colors duration-300"
                     >
                       Forgot Password?
@@ -362,6 +541,23 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {/* --- ONBOARDING MODAL --- */}
+      {showOnboarding && (
+        <OnboardingModal
+          user={currentUser}
+          onComplete={handleOnboardingComplete}
+        />
+      )}
+
+      {/* --- ERROR MODAL --- */}
+      {errorModal.show && (
+        <ErrorModal
+          title={errorModal.title}
+          message={errorModal.message}
+          onClose={() => setErrorModal({ ...errorModal, show: false })}
+        />
+      )}
     </div>
   );
 }

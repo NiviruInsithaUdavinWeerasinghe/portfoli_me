@@ -1,10 +1,13 @@
-// src/lib/firebase.js
-
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getAuth } from "firebase/auth"; // Added for Authentication
-import { getFirestore } from "firebase/firestore"; // Added for Database
+import {
+  getAuth,
+  GoogleAuthProvider,
+  GithubAuthProvider,
+  TwitterAuthProvider,
+} from "firebase/auth"; // Updated import
+import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -24,6 +27,9 @@ const analytics = getAnalytics(app);
 // Initialize Services
 const auth = getAuth(app);
 const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
+const githubProvider = new GithubAuthProvider();
+const twitterProvider = new TwitterAuthProvider(); // Initialize Twitter/X Provider
 
 // Export them for use in other files
-export { auth, db, app };
+export { auth, db, app, googleProvider, githubProvider, twitterProvider };
