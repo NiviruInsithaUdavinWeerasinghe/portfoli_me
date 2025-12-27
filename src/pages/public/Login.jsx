@@ -6,7 +6,16 @@ export default function Login() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isExiting, setIsExiting] = useState(false); // New state for exit animation
   const [formData, setFormData] = useState({ email: "", password: "" });
+
+  // Handle smooth transition back to Home
+  const handleHomeNavigation = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      navigate("/");
+    }, 800); // Wait for fade-out before switching URL
+  };
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -20,6 +29,13 @@ export default function Login() {
 
   return (
     <div className="h-screen bg-[#020617] text-white font-sans selection:bg-orange-500 selection:text-white flex items-center justify-center overflow-hidden relative p-[80px]">
+      {/* --- EXIT TRANSITION OVERLAY (Simple Fade Out) --- */}
+      <div
+        className={`fixed inset-0 z-[200] bg-[#020617] pointer-events-none transition-opacity duration-700 ease-in-out ${
+          isExiting ? "opacity-100" : "opacity-0"
+        }`}
+      ></div>
+
       {/* --- COOL CYBER SHUTTER TRANSITION (ENTRY) --- */}
       <div className="fixed inset-0 z-[100] grid grid-cols-5 pointer-events-none">
         {["L", "O", "G", "I", "N"].map((letter, i) => (
@@ -72,7 +88,7 @@ export default function Login() {
 
       {/* --- TOP RIGHT HOME BUTTON (Moved to Page Level) --- */}
       <button
-        onClick={() => navigate("/")}
+        onClick={handleHomeNavigation}
         className="absolute top-6 right-6 z-50 w-12 h-12 bg-[#0B1120]/50 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-orange-600 hover:border-orange-500 transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_rgba(234,88,12,0.3)] group"
       >
         <X
@@ -99,7 +115,7 @@ export default function Login() {
           <div className="relative z-10 p-16 flex flex-col h-full justify-between">
             <div
               className="inline-flex items-center gap-3 cursor-pointer self-start"
-              onClick={() => navigate("/")}
+              onClick={handleHomeNavigation}
             >
               <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-orange-900/20">
                 P
@@ -148,7 +164,7 @@ export default function Login() {
             <div className="text-center mb-8 lg:hidden relative z-10">
               <div
                 className="inline-flex items-center gap-2 cursor-pointer"
-                onClick={() => navigate("/")}
+                onClick={handleHomeNavigation}
               >
                 <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-orange-900/20">
                   P

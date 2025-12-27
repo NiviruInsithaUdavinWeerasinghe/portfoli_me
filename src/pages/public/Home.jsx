@@ -17,6 +17,12 @@ import { useNavigate } from "react-router-dom";
 function Home() {
   const navigate = useNavigate();
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false); // New state for entry animation
+
+  React.useEffect(() => {
+    // Trigger entry fade-in on mount
+    setIsLoaded(true);
+  }, []);
 
   const handleNavigation = (path) => {
     setIsTransitioning(true);
@@ -28,6 +34,13 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white font-sans selection:bg-orange-500 selection:text-white overflow-x-hidden flex flex-col relative">
+      {/* --- ENTRY TRANSITION OVERLAY (Simple Fade In) --- */}
+      <div
+        className={`fixed inset-0 z-[150] bg-[#020617] pointer-events-none transition-opacity duration-1000 ease-out ${
+          isLoaded ? "opacity-0" : "opacity-100"
+        }`}
+      ></div>
+
       {/* --- COOL CYBER SHUTTER TRANSITION (EXIT) --- */}
       <div className="fixed inset-0 z-[100] grid grid-cols-5 pointer-events-none">
         {["L", "O", "G", "I", "N"].map((letter, i) => (
