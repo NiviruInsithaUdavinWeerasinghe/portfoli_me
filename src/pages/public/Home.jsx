@@ -11,22 +11,44 @@ import {
   Linkedin,
   Briefcase,
   ExternalLink,
+  User,
+  LogOut,
+  Settings,
+  ChevronDown,
+  Mail, // Added for Google/Email
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext"; // Added
 
 function Home() {
   const navigate = useNavigate();
+  const { currentUser, logout } = useAuth(); // Get auth state
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false); // Dropdown state
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false); // New state for entry animation
+  const [isLoaded, setIsLoaded] = useState(false);
+  // New state to dynamically change the shutter text (LOGIN vs START)
+  const [transitionLetters, setTransitionLetters] = useState([
+    "L",
+    "O",
+    "G",
+    "I",
+    "N",
+  ]);
 
   React.useEffect(() => {
-    // Trigger entry fade-in on mount
     setIsLoaded(true);
   }, []);
 
   const handleNavigation = (path) => {
+    // Set the transition text based on where the user is going
+    if (path === "/register") {
+      setTransitionLetters(["S", "T", "A", "R", "T"]);
+    } else {
+      setTransitionLetters(["L", "O", "G", "I", "N"]);
+    }
+
     setIsTransitioning(true);
-    // Increased delay to 1200ms so the "LOGIN" text can fully animate before page switch
+    // Delay to allow the specific text to animate in before switching pages
     setTimeout(() => {
       navigate(path);
     }, 1200);
@@ -43,7 +65,7 @@ function Home() {
 
       {/* --- COOL CYBER SHUTTER TRANSITION (EXIT) --- */}
       <div className="fixed inset-0 z-[100] grid grid-cols-5 pointer-events-none">
-        {["L", "O", "G", "I", "N"].map((letter, i) => (
+        {transitionLetters.map((letter, i) => (
           <div
             key={i}
             className={`relative h-full bg-[#020617] border-r border-white/5 flex items-center justify-center transform transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
@@ -126,19 +148,160 @@ function Home() {
                 Pricing
               </button>
             </div>
-            <div className="flex items-center gap-4 text-sm font-medium">
-              <button
-                onClick={() => handleNavigation("/login")}
-                className="text-gray-400 hover:text-white transition-colors hidden sm:block"
-              >
-                Login
-              </button>
-              <button
-                onClick={() => navigate("/register")}
-                className="bg-amber-600 text-white px-5 py-2 rounded-full hover:bg-orange-500 transition-all hover:shadow-[0_0_20px_rgba(234,88,12,0.3)] active:scale-95"
-              >
-                Get Started
-              </button>
+            <div className="flex items-center gap-4 text-sm font-medium relative">
+              {currentUser ? (
+                /* --- LOGGED IN: PROFILE DROPDOWN --- */
+                <div className="relative">
+                  <button
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                    className="flex items-center gap-2 bg-white/5 border border-white/10 pr-3 pl-2 py-1.5 rounded-full hover:bg-white/10 transition-all group"
+                  >
+                    {/* Check if user has a photoURL, otherwise fallback to Initials */}
+                    {currentUser.photoURL ? (
+                      <img
+                        src={currentUser.photoURL}
+                        alt="Profile"
+                        className="w-8 h-8 rounded-full border border-white/10 shadow-lg object-cover"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-orange-500 to-amber-600 flex items-center justify-center text-white font-bold shadow-lg">
+                        {currentUser.email?.charAt(0).toUpperCase() || "U"}
+                      </div>
+                    )}
+
+                    <ChevronDown
+                      size={16}
+                      className={`text-gray-400 group-hover:text-white transition-transform duration-300 ${
+                        isDropdownOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {isDropdownOpen && (
+                    <div className="absolute top-full right-0 mt-4 w-72 bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[60] animate-in fade-in slide-in-from-top-2 ring-1 ring-white/5">
+                      {/* --- User Info Card --- */}
+                      <div className="bg-white/5 rounded-xl p-5 mb-4 border border-white/5 flex items-center justify-between gap-4">
+                        <div className="overflow-hidden flex-1">
+                          <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1.5">
+                            Signed in as
+                          </p>
+                          <p
+                            className="text-sm font-bold text-white truncate"
+                            title={currentUser.email}
+                          >
+                            {/* Check if logged in via Twitter (X), show name instead of email */}
+                            {currentUser.providerData?.some(
+                              (p) => p.providerId === "twitter.com"
+                            )
+                              ? currentUser.displayName
+                              : currentUser.email}
+                          </p>
+                        </div>
+
+                        {/* Service Icon Display */}
+                        <div className="shrink-0 p-2.5 bg-white/5 rounded-lg border border-white/5 text-gray-300 flex items-center justify-center">
+                          {currentUser.providerData?.some(
+                            (p) => p.providerId === "google.com"
+                          ) ? (
+                            /* Custom Google Icon */
+                            <svg
+                              width="20"
+                              height="20"
+                              viewBox="0 0 24 24"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <path
+                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                fill="#4285F4"
+                              />
+                              <path
+                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                fill="#34A853"
+                              />
+                              <path
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                                fill="#FBBC05"
+                              />
+                              <path
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                                fill="#EA4335"
+                              />
+                            </svg>
+                          ) : currentUser.providerData?.some(
+                              (p) => p.providerId === "github.com"
+                            ) ? (
+                            <Github size={20} />
+                          ) : currentUser.providerData?.some(
+                              (p) => p.providerId === "twitter.com"
+                            ) ? (
+                            /* Custom X (Twitter) Icon */
+                            <svg
+                              width="18"
+                              height="18"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                            </svg>
+                          ) : (
+                            <Mail size={20} /> /* Email/Password Fallback */
+                          )}
+                        </div>
+                      </div>
+
+                      {/* --- Menu Items --- */}
+                      <div className="space-y-1">
+                        <button className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group">
+                          <div className="p-2 bg-blue-500/10 rounded-lg group-hover:bg-blue-500/20 transition-colors border border-blue-500/10">
+                            <User size={18} className="text-blue-500" />
+                          </div>
+                          Profile
+                        </button>
+
+                        <button className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group">
+                          <div className="p-2 bg-orange-500/10 rounded-lg group-hover:bg-orange-500/20 transition-colors border border-orange-500/10">
+                            <Settings size={18} className="text-orange-500" />
+                          </div>
+                          Settings
+                        </button>
+                      </div>
+
+                      <div className="h-px bg-white/5 my-2 mx-2"></div>
+
+                      <button
+                        onClick={() => {
+                          logout();
+                          setIsDropdownOpen(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-xl transition-all duration-200 text-left group"
+                      >
+                        <div className="p-2 bg-red-500/10 rounded-lg group-hover:bg-red-500/20 transition-colors border border-red-500/10">
+                          <LogOut size={18} />
+                        </div>
+                        Sign out
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* --- LOGGED OUT: LOGIN BUTTONS --- */
+                <>
+                  <button
+                    onClick={() => handleNavigation("/login")}
+                    className="text-gray-400 hover:text-white transition-colors hidden sm:block"
+                  >
+                    Login
+                  </button>
+                  <button
+                    onClick={() => handleNavigation("/register")}
+                    className="bg-amber-600 text-white px-5 py-2 rounded-full hover:bg-orange-500 transition-all hover:shadow-[0_0_20px_rgba(234,88,12,0.3)] active:scale-95"
+                  >
+                    Get Started
+                  </button>
+                </>
+              )}
             </div>
           </nav>
         </div>
@@ -162,20 +325,23 @@ function Home() {
             share with recruiters. Focus on your work, we'll handle the website.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto mb-12">
-            <button
-              onClick={() => navigate("/register")}
-              className="bg-white text-black px-8 py-3.5 rounded-xl font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 shadow-xl shadow-white/5"
-            >
-              Create Your Portfolio <ArrowRight size={18} />
-            </button>
-            <button
-              onClick={() => navigate("/demo_user/home")}
-              className="px-8 py-3.5 rounded-xl font-bold text-gray-300 border border-white/10 hover:bg-white/5 hover:text-white transition-colors"
-            >
-              View Live Demo
-            </button>
-          </div>
+          {/* ONLY SHOW BUTTONS IF LOGGED IN */}
+          {currentUser && (
+            <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto mb-12">
+              <button
+                onClick={() => navigate("/demo_user/home")} // Updated to match Login redirect
+                className="bg-white text-black px-8 py-3.5 rounded-xl font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 shadow-xl shadow-white/5"
+              >
+                Create Your Portfolio <ArrowRight size={18} />
+              </button>
+              <button
+                onClick={() => {}} /* Linkless for now */
+                className="px-8 py-3.5 rounded-xl font-bold text-gray-300 border border-white/10 hover:bg-white/5 hover:text-white transition-colors cursor-default"
+              >
+                View Live Demo
+              </button>
+            </div>
+          )}
         </main>
 
         {/* --- SECTION 1: SKILLS --- */}
