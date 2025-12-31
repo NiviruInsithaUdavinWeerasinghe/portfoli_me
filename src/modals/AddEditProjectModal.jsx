@@ -314,6 +314,10 @@ export default function AddEditProjectModal({
     setIsEditingMedia(false); // Reset edit mode
     setPreviewItem(null); // Reset preview overlay
 
+    // Reset Editor Toolbar States (Bold, Italic, List Styles, Links, etc.)
+    setActiveFormats({});
+    setLinkData({ text: "", url: "" });
+
     if (initialData) {
       setFormData({
         ...initialData,
