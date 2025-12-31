@@ -1,8 +1,7 @@
 //C:\PortfoliMe\portfoli_me\src\templates\liquid_glass\LiquidGlassUserHome.jsx
 
 import React, { useState, useEffect } from "react";
-import { useOutletContext, Link } from "react-router-dom";
-// --- NEW IMPORTS START ---
+import { useOutletContext, Link, useNavigate } from "react-router-dom"; // --- NEW IMPORTS START ---
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 // --- NEW IMPORTS END ---
@@ -149,8 +148,31 @@ const RECENT_ACTIVITY = [
 
 // --- MAIN COMPONENT ---
 export default function LiquidGlassUserHome() {
-  const { isEditMode } = useOutletContext();
+  // UPDATED: Destructure setIsEditMode
+  const { isEditMode, setIsEditMode } = useOutletContext();
   const { currentUser } = useAuth();
+  const navigate = useNavigate(); // Added hook
+
+  // NEW: Handler for the Add Project logic
+  const handleAddProjectRedirect = () => {
+    console.log("🔘 [DEBUG] 'Add Project' button clicked in Overview.");
+
+    // 1. Toggle Edit Mode
+    if (setIsEditMode) {
+      console.log("🔄 [DEBUG] Toggling Edit Mode: ON");
+      setIsEditMode(true);
+    } else {
+      console.warn("⚠️ [DEBUG] setIsEditMode not found in context!");
+    }
+
+    // 2. Navigate with State for Highlight
+    console.log(
+      "➡️ [DEBUG] Navigating to Projects page with highlight trigger..."
+    );
+    navigate(`../projects`, {
+      state: { highlightAddButton: true },
+    });
+  };
 
   // -- State Management --
   const [loading, setLoading] = useState(true);
@@ -345,6 +367,7 @@ export default function LiquidGlassUserHome() {
           setDashboardStats((prev) => ({
             ...prev,
             commitsCount: totalCommits,
+            reposCount: repos.length, // --- NEW: Store Repo Count ---
           }));
         } catch (e) {
           console.error("Github fetch error", e);
@@ -569,12 +592,18 @@ export default function LiquidGlassUserHome() {
           />
 
           {/* B. Metrics & Skills Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <StatsWidget stats={dashboardStats} />
-            <SkillsWidget
-              skills={derivedSkills}
-              onSeeMore={() => setShowSkillsModal(true)}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+            <div className="md:col-span-3">
+              <StatsWidget stats={dashboardStats} />
+            </div>
+            <div className="md:col-span-2">
+              <SkillsWidget
+                skills={derivedSkills}
+                isLoggedIn={!!currentUser} // Pass login status
+                onSeeMore={() => setShowSkillsModal(true)}
+                onAddProject={handleAddProjectRedirect} // Pass handler
+              />
+            </div>
           </div>
 
           {/* Skills Modal */}
@@ -867,7 +896,7 @@ const StatsWidget = ({ stats }) => {
     <div className="grid grid-cols-2 gap-4">
       {/* Card 1: Views & Shares (Horizontal Split) */}
       <div className="bg-[#0B1120] border border-white/5 rounded-xl flex flex-col hover:border-orange-500/20 transition-colors group overflow-hidden">
-        <div className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+        <div className="flex-1 p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
           <div>
             <div className="text-gray-400 mb-1 group-hover:text-white transition-colors">
               <Users size={18} />
@@ -881,7 +910,7 @@ const StatsWidget = ({ stats }) => {
 
         <div className="h-px w-full bg-white/5"></div>
 
-        <div className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+        <div className="flex-1 p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
           <div>
             <div className="text-gray-400 mb-1 group-hover:text-white transition-colors">
               <Share2 size={18} />
@@ -894,8 +923,9 @@ const StatsWidget = ({ stats }) => {
         </div>
       </div>
 
-      {/* Card 2: Projects & Commits (Horizontal Split) */}
+      {/* Card 2: Projects, Repos & Commits */}
       <div className="bg-[#0B1120] border border-white/5 rounded-xl flex flex-col hover:border-orange-500/20 transition-colors group overflow-hidden">
+        {/* Top Half: Projects (Full Width) */}
         <div className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
           <div>
             <div className="text-gray-400 mb-1 group-hover:text-orange-500 transition-colors">
@@ -912,17 +942,36 @@ const StatsWidget = ({ stats }) => {
 
         <div className="h-px w-full bg-white/5"></div>
 
-        <div className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
-          <div>
-            <div className="text-gray-400 mb-1 group-hover:text-white transition-colors">
-              <GitCommit size={18} />
+        {/* Bottom Half: Split Vertically (Repos | Commits) */}
+        <div className="grid grid-cols-2 divide-x divide-white/5">
+          {/* Left: Github Repos */}
+          <div className="p-4 flex flex-col justify-between hover:bg-white/5 transition-colors">
+            <div className="flex justify-between items-start mb-1">
+              <div className="text-gray-400 group-hover:text-white transition-colors">
+                <Github size={18} />
+              </div>
+              <div className="text-xl font-bold text-white">
+                {stats.reposCount || 0}
+              </div>
+            </div>
+            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wide">
+              Repos
+            </div>
+          </div>
+
+          {/* Right: Commits */}
+          <div className="p-4 flex flex-col justify-between hover:bg-white/5 transition-colors">
+            <div className="flex justify-between items-start mb-1">
+              <div className="text-gray-400 group-hover:text-white transition-colors">
+                <GitCommit size={18} />
+              </div>
+              <div className="text-xl font-bold text-white">
+                {stats.commitsCount}
+              </div>
             </div>
             <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wide">
               Commits
             </div>
-          </div>
-          <div className="text-2xl font-bold text-white">
-            {stats.commitsCount}
           </div>
         </div>
       </div>
@@ -979,13 +1028,22 @@ const StatsWidget = ({ stats }) => {
 };
 
 // ============================================================================
-// SUB-COMPONENT: Skills Widget
+// SUB-COMPONENT: SkillsWidget
 // ============================================================================
-const SkillsWidget = ({ skills, onSeeMore }) => {
+const SkillsWidget = ({ skills, onSeeMore, onAddProject, isLoggedIn }) => {
   // Logic to handle overflow
-  const MAX_VISIBLE_SKILLS = 10; // Adjust number based on card size preference
+  const MAX_VISIBLE_SKILLS = 10;
   const visibleSkills = skills.slice(0, MAX_VISIBLE_SKILLS);
   const overflowCount = skills.length - MAX_VISIBLE_SKILLS;
+  const hasSkills = skills.length > 0;
+  const isFewSkills = skills.length > 0 && skills.length < 5; // Threshold for "Few"
+
+  console.log("📊 [DEBUG] Skills Widget Render:", {
+    count: skills.length,
+    hasSkills,
+    isFewSkills,
+    isLoggedIn,
+  });
 
   return (
     <div className="bg-[#0B1120] border border-white/5 p-6 rounded-xl flex flex-col h-full relative group">
@@ -994,35 +1052,79 @@ const SkillsWidget = ({ skills, onSeeMore }) => {
           <Cpu size={18} className="text-orange-500" />
           Tech Stack
         </h3>
-        <button
-          onClick={onSeeMore}
-          className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500/10 text-orange-500 border border-orange-500/20 hover:bg-orange-500 hover:text-white transition-all duration-300 text-xs font-bold shadow-lg shadow-orange-500/5 hover:shadow-orange-500/20"
-        >
-          See more
-          <ArrowUpRight
-            size={12}
-            className="transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-          />
-        </button>
+
+        {/* Only show 'See more' if we have skills */}
+        {hasSkills && (
+          <button
+            onClick={onSeeMore}
+            className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500/10 text-orange-500 border border-orange-500/20 hover:bg-orange-500 hover:text-white transition-all duration-300 text-xs font-bold shadow-lg shadow-orange-500/5 hover:shadow-orange-500/20"
+          >
+            See more
+            <ArrowUpRight
+              size={12}
+              className="transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+            />
+          </button>
+        )}
       </div>
 
-      <div className="flex-1 content-start flex flex-wrap gap-2">
-        {visibleSkills.map((skill, index) => (
-          <div
-            key={index}
-            title={skill}
-            className="px-3 py-1.5 rounded-md text-sm font-medium transition-all bg-blue-500/10 text-blue-400 border border-blue-500/20 cursor-default"
-          >
-            {skill.length > 10 ? `${skill.slice(0, 10)}...` : skill}
-          </div>
-        ))}
+      <div className="flex-1 content-start flex flex-col">
+        {/* SKILLS LIST AREA */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {visibleSkills.map((skill, index) => (
+            <div
+              key={index}
+              title={skill}
+              className="px-3 py-1.5 rounded-md text-sm font-medium transition-all bg-blue-500/10 text-blue-400 border border-blue-500/20 cursor-default"
+            >
+              {skill.length > 10 ? `${skill.slice(0, 10)}...` : skill}
+            </div>
+          ))}
 
-        {overflowCount > 0 && (
-          <div
-            onClick={onSeeMore}
-            className="px-3 py-1.5 rounded-md text-sm font-bold bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 hover:text-white cursor-pointer transition-colors"
-          >
-            +{overflowCount}
+          {overflowCount > 0 && (
+            <div
+              onClick={onSeeMore}
+              className="px-3 py-1.5 rounded-md text-sm font-bold bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 hover:text-white cursor-pointer transition-colors"
+            >
+              +{overflowCount}
+            </div>
+          )}
+        </div>
+
+        {/* LOGIC: CASE 1 - NO SKILLS (Logged In Only) */}
+        {!hasSkills && isLoggedIn && (
+          <div className="mt-auto py-8 px-4 bg-[#0f1623] border border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-500">
+            <p className="text-gray-400 text-sm mb-4 max-w-[200px]">
+              No skills detected yet. Add a project to auto-generate your stack!
+            </p>
+            <button
+              onClick={onAddProject}
+              className="bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white font-bold py-2 px-6 rounded-lg shadow-lg shadow-orange-900/20 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+            >
+              <Plus size={16} /> Add First Project
+            </button>
+          </div>
+        )}
+
+        {/* LOGIC: CASE 2 - FEW SKILLS (Logged In Only) */}
+        {isFewSkills && isLoggedIn && (
+          <div className="mt-auto pt-4 border-t border-white/5">
+            <div className="bg-[#0f172a] border border-blue-500/20 rounded-xl p-4 flex items-center justify-between group/card hover:border-blue-500/40 transition-colors">
+              <div>
+                <h4 className="font-bold text-white text-sm">
+                  Expand your stack?
+                </h4>
+                <p className="text-xs text-blue-200/70 mt-0.5">
+                  Add more projects to showcase your expertise.
+                </p>
+              </div>
+              <button
+                onClick={onAddProject}
+                className="w-10 h-10 rounded-lg bg-[#1e293b] border border-blue-500/30 text-blue-400 flex items-center justify-center hover:bg-blue-600 hover:text-white hover:border-blue-500 transition-all duration-300 shadow-lg shadow-black/20"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
           </div>
         )}
       </div>

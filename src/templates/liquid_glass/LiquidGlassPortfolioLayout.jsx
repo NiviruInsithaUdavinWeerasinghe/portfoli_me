@@ -380,7 +380,8 @@ const LiquidGlassPortfolioLayout = () => {
               {location.pathname.split("/").pop()}
             </span>
           </div>
-          <Outlet context={{ isEditMode }} />
+          {/* UPDATED: Passing setIsEditMode so child pages can toggle it */}
+          <Outlet context={{ isEditMode, setIsEditMode }} />
         </div>
       </main>
     </div>

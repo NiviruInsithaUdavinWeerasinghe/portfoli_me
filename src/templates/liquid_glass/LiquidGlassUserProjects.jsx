@@ -23,6 +23,7 @@ import {
   updateProject,
   deleteProject,
   toggleProjectLike,
+  getProjectComments,
 } from "../../services/projectService";
 import AddEditProjectModal from "../../modals/AddEditProjectModal";
 import ProjectViewModal from "../../modals/ProjectViewModal";
@@ -35,17 +36,33 @@ export default function LiquidGlassUserProjects() {
   // Highlighting Logic
   const location = useLocation();
   const [highlightedId, setHighlightedId] = useState(null);
+  // NEW: State for highlighting the Add Button
+  const [highlightAddBtn, setHighlightAddBtn] = useState(false);
 
   useEffect(() => {
+    // 1. Existing Project Highlight Logic
     if (location.state?.highlightProjectId) {
       const id = location.state.highlightProjectId;
       setHighlightedId(id);
 
-      // Auto-disappear after 10 seconds
       const timer = setTimeout(() => {
         setHighlightedId(null);
         window.history.replaceState({}, document.title);
       }, 10000);
+      return () => clearTimeout(timer);
+    }
+
+    // 2. NEW: Add Button Highlight Logic
+    if (location.state?.highlightAddButton) {
+      console.log("✨ [DEBUG] Highlighting 'Add Project' Button");
+      setHighlightAddBtn(true);
+
+      // Remove highlight after animation
+      const timer = setTimeout(() => {
+        setHighlightAddBtn(false);
+        // Clear state so refresh doesn't trigger it again
+        window.history.replaceState({}, document.title);
+      }, 3000);
 
       return () => clearTimeout(timer);
     }
@@ -75,7 +92,19 @@ export default function LiquidGlassUserProjects() {
     try {
       setLoading(true);
       const data = await getUserProjects(currentUser.uid);
-      setProjects(data);
+
+      // Fetch comment counts for each project
+      const projectsWithCounts = await Promise.all(
+        data.map(async (project) => {
+          const comments = await getProjectComments(
+            currentUser.uid,
+            project.id
+          );
+          return { ...project, commentsCount: comments.length };
+        })
+      );
+
+      setProjects(projectsWithCounts);
     } catch (error) {
       console.error("Failed to load projects", error);
     } finally {
@@ -252,7 +281,14 @@ export default function LiquidGlassUserProjects() {
           {isEditMode && (
             <button
               onClick={handleOpenAdd}
-              className="flex items-center justify-center gap-2 bg-white text-black px-5 py-2.5 rounded-xl font-bold hover:bg-gray-200 transition-colors"
+              className={`
+                flex items-center justify-center gap-2 bg-white text-black px-5 py-2.5 rounded-xl font-bold hover:bg-gray-200 transition-all duration-500 border-2
+                ${
+                  highlightAddBtn
+                    ? "border-orange-500 shadow-[0_0_40px_rgba(249,115,22,0.6)] scale-110 z-20"
+                    : "border-transparent"
+                }
+              `}
             >
               <Plus size={18} /> <span>Add Project</span>
             </button>
@@ -400,6 +436,25 @@ const ProjectGridCard = ({
   const CHAR_LIMIT = 12;
   const isLiked = project.likedBy?.includes(currentUser?.uid);
 
+  // NEW: Date formatting logic
+  const getFormattedDate = () => {
+    if (!project.startDate) return null;
+
+    const options = { year: "numeric", month: "short" };
+    const start = new Date(project.startDate).toLocaleDateString(
+      "en-US",
+      options
+    );
+
+    const end = project.endDate
+      ? new Date(project.endDate).toLocaleDateString("en-US", options)
+      : "Present";
+
+    return `${start} - ${end}`;
+  };
+
+  const dateString = getFormattedDate();
+
   return (
     <div
       onClick={onClick}
@@ -446,18 +501,23 @@ const ProjectGridCard = ({
         )}
       </div>
       <div className="p-6 flex flex-col flex-grow">
-        <div className="flex items-center gap-2 mb-3 text-xs text-gray-500 font-medium">
-          <Calendar size={14} /> {project.date}
-        </div>
+        {/* Updated Date Display */}
+        {dateString && (
+          <div className="flex items-center gap-2 mb-3 text-xs text-gray-500 font-medium">
+            <Calendar size={14} /> {dateString}
+          </div>
+        )}
+
         <h3
           title={project.title}
           className="text-lg font-bold text-white mb-2 group-hover:text-orange-500 transition-colors truncate"
         >
           {project.title}
         </h3>
-        <p className="text-gray-400 text-sm mb-6 line-clamp-3 flex-grow break-all">
-          {project.description}
-        </p>
+        <div
+          className="text-gray-400 text-sm mb-6 line-clamp-3 flex-grow break-all [&_p]:inline [&_ul]:inline [&_ol]:inline"
+          dangerouslySetInnerHTML={{ __html: project.description }}
+        />
         <div className="flex flex-col gap-4 pt-4 border-t border-white/5 mt-auto">
           <div className="flex flex-wrap items-center gap-2">
             {visibleTags.map((tag, i) => (
@@ -495,10 +555,11 @@ const ProjectGridCard = ({
               </button>
               <button
                 onClick={onComment}
-                disabled={!currentUser} // Non-logged in users can view count if added, but prompt says 'can view likes and comments'. Assuming they can CLICK to view, but 'interaction' is disabled. Modal handles view-only.
+                disabled={!currentUser}
                 className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-white transition-colors"
               >
                 <MessageSquare size={16} />
+                <span>{project.commentsCount || 0}</span>
               </button>
             </div>
 
@@ -552,6 +613,25 @@ const ProjectListCard = ({
   const CHAR_LIMIT = 15;
   const isLiked = project.likedBy?.includes(currentUser?.uid);
 
+  // NEW: Date formatting logic
+  const getFormattedDate = () => {
+    if (!project.startDate) return null;
+
+    const options = { year: "numeric", month: "short" };
+    const start = new Date(project.startDate).toLocaleDateString(
+      "en-US",
+      options
+    );
+
+    const end = project.endDate
+      ? new Date(project.endDate).toLocaleDateString("en-US", options)
+      : "Present";
+
+    return `${start} - ${end}`;
+  };
+
+  const dateString = getFormattedDate();
+
   return (
     <div
       onClick={onClick}
@@ -572,6 +652,13 @@ const ProjectListCard = ({
         />
       </div>
       <div className="flex-1 p-6 flex flex-col">
+        {/* Date Display Added Here */}
+        {dateString && (
+          <div className="flex items-center gap-2 mb-2 text-xs text-gray-500 font-medium">
+            <Calendar size={14} /> {dateString}
+          </div>
+        )}
+
         <div className="flex justify-between items-start mb-2 overflow-hidden">
           <h3
             title={project.title}
@@ -596,9 +683,10 @@ const ProjectListCard = ({
             </div>
           )}
         </div>
-        <p className="text-gray-400 text-sm mb-5 line-clamp-2 break-all">
-          {project.description}
-        </p>
+        <div
+          className="text-gray-400 text-sm mb-5 line-clamp-2 break-all [&_p]:inline [&_ul]:inline [&_ol]:inline"
+          dangerouslySetInnerHTML={{ __html: project.description }}
+        />
         <div className="mt-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
             {visibleTags.map((tag, i) => (
@@ -639,6 +727,7 @@ const ProjectListCard = ({
                 className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-white transition-colors"
               >
                 <MessageSquare size={16} />
+                <span>{project.commentsCount || 0}</span>
               </button>
             </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -14,8 +14,16 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
-  Edit, // New icon
-  GripVertical, // New icon
+  Edit,
+  GripVertical,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  List,
+  ListOrdered,
+  Link as LinkIcon,
+  Info,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { uploadFileToCloudinary } from "../services/cloudinaryService";
@@ -33,6 +41,9 @@ export default function AddEditProjectModal({
 }) {
   const { currentUser } = useAuth();
 
+  // Ref to manage the editor DOM element directly
+  const editorRef = useRef(null);
+
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -48,18 +59,261 @@ export default function AddEditProjectModal({
 
   const [repos, setRepos] = useState([]);
   const [loadingRepos, setLoadingRepos] = useState(false);
-  const [githubToken, setGithubToken] = useState(null); // Added state
+  const [githubToken, setGithubToken] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [tagInput, setTagInput] = useState("");
-  const [error, setError] = useState(""); // New Error State
+  const [error, setError] = useState("");
+
+  // --- Text Editor State & Logic ---
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [activeListMenu, setActiveListMenu] = useState(null); // 'ul' | 'ol' | null
+  const [linkData, setLinkData] = useState({ text: "", url: "" });
+  const [savedSelection, setSavedSelection] = useState(null);
+  const [activeFormats, setActiveFormats] = useState({});
+
+  // NEW: Logic to handle smart list numbering (Reset on text, continue on sub-bullets/breaks)
+  // NEW: Advanced Logic to handle lists wrapped in divs and sibling lists
+  const updateListNumbering = () => {
+    if (!editorRef.current) return;
+
+    let currentCount = 1;
+
+    // Recursive helper to process nodes and their children
+    const processNode = (node) => {
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+      const tagName = node.tagName.toLowerCase();
+
+      // 1. If it's an Ordered List (<ol>)
+      if (tagName === "ol") {
+        node.setAttribute("start", currentCount);
+
+        // Count only direct <li> children to avoid counting nested sub-items
+        // This ensures <ol><li>Item 1 <ol><li>SubItem</li></ol></li></ol> only counts as 1
+        let directLiCount = 0;
+        Array.from(node.children).forEach((child) => {
+          if (child.tagName.toLowerCase() === "li") directLiCount++;
+        });
+
+        // Fallback: If <li> are buried (e.g. inside invalid <ul> children of <ol>), counting all <li> might be safer visually
+        // But for standard structure, direct children is correct.
+        // In your specific "sdfsd" case, 'sdfsd' is a direct LI, so this works.
+        currentCount += directLiCount;
+        return;
+      }
+
+      // 2. If it's an Unordered List (<ul>)
+      if (tagName === "ul") {
+        // Do not reset count. Do not increment count.
+        // Just skip it so the sequence continues across it.
+        return;
+      }
+
+      // 3. If it's a container (<div> or <p>) that might contain lists
+      const hasListChildren = Array.from(node.children).some((child) =>
+        ["ol", "ul"].includes(child.tagName.toLowerCase())
+      );
+
+      if (hasListChildren) {
+        // If it wraps lists, drill down and process children sequentially
+        Array.from(node.children).forEach((child) => processNode(child));
+        return;
+      }
+
+      // 4. If it's a text block (and we haven't returned yet)
+      const text = node.textContent || "";
+      const hasText = text.trim().length > 0;
+
+      // If it has actual text, it breaks the numbering sequence -> Reset to 1
+      if (hasText) {
+        currentCount = 1;
+      }
+      // If it's empty (like <br> or empty <div>), we do nothing, preserving the count
+    };
+
+    // Start processing from the editor's top-level children
+    Array.from(editorRef.current.children).forEach((child) =>
+      processNode(child)
+    );
+  };
+
+  const checkFormats = () => {
+    const selection = window.getSelection();
+    let activeUlStyle = null;
+    let activeOlStyle = null;
+    let isLink = false;
+    let currentUrl = "";
+
+    if (selection.rangeCount > 0) {
+      let node = selection.anchorNode;
+      while (node && node !== editorRef.current) {
+        if (node.nodeName === "UL") {
+          activeUlStyle = node.style.listStyleType || "disc";
+        } else if (node.nodeName === "OL") {
+          activeOlStyle = node.getAttribute("type") || "1";
+        } else if (node.nodeName === "A") {
+          isLink = true;
+          currentUrl = node.getAttribute("href");
+        }
+        node = node.parentNode;
+      }
+    }
+
+    setActiveFormats({
+      bold: document.queryCommandState("bold"),
+      italic: document.queryCommandState("italic"),
+      underline: document.queryCommandState("underline"),
+      strikeThrough: document.queryCommandState("strikeThrough"),
+      insertUnorderedList: document.queryCommandState("insertUnorderedList"),
+      insertOrderedList: document.queryCommandState("insertOrderedList"),
+      ulStyle: activeUlStyle,
+      olStyle: activeOlStyle,
+      isLink,
+      linkUrl: currentUrl,
+    });
+  };
+
+  const execCommand = (command, value = null) => {
+    document.execCommand(command, false, value);
+    checkFormats();
+    updateListNumbering(); // Update numbering on command
+    if (editorRef.current) {
+      setFormData((prev) => ({
+        ...prev,
+        description: editorRef.current.innerHTML,
+      }));
+      editorRef.current.focus();
+    }
+  };
+
+  const handleEditorKeyDown = (e) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const command = e.shiftKey ? "outdent" : "indent";
+      document.execCommand(command);
+      checkFormats();
+      updateListNumbering(); // Update numbering on tab
+      if (editorRef.current) {
+        setFormData((prev) => ({
+          ...prev,
+          description: editorRef.current.innerHTML,
+        }));
+      }
+    }
+  };
+
+  // ... (Keep existing applyListStyle, saveSelection, restoreSelection, handleInsertLink functions exactly as they were) ...
+  // To save space in chat, I am assuming you keep the helper functions here.
+  // Just ensure updateListNumbering() is called whenever content changes (see below in the JSX).
+
+  const applyListStyle = (cmd, styleValue) => {
+    const isOrdered = cmd === "insertOrderedList";
+    const currentState = document.queryCommandState(cmd);
+
+    if (!currentState) {
+      document.execCommand(cmd);
+    }
+
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      let node = selection.anchorNode;
+      while (node && node !== editorRef.current) {
+        if (node.nodeName === (isOrdered ? "OL" : "UL")) {
+          if (isOrdered) {
+            const cssMap = {
+              1: "decimal",
+              a: "lower-alpha",
+              A: "upper-alpha",
+              i: "lower-roman",
+              I: "upper-roman",
+            };
+            node.style.listStyleType = cssMap[styleValue] || "decimal";
+            node.setAttribute("type", styleValue);
+          } else {
+            node.style.listStyleType = styleValue;
+          }
+          break;
+        }
+        node = node.parentNode;
+      }
+    }
+
+    checkFormats();
+    updateListNumbering(); // Update numbering on style change
+    if (editorRef.current) {
+      setFormData((prev) => ({
+        ...prev,
+        description: editorRef.current.innerHTML,
+      }));
+      editorRef.current.focus();
+    }
+    setActiveListMenu(null);
+  };
+
+  const saveSelection = () => {
+    const sel = window.getSelection();
+    if (sel.rangeCount > 0) {
+      setSavedSelection(sel.getRangeAt(0));
+      setLinkData((prev) => ({ ...prev, text: sel.toString() }));
+    }
+  };
+
+  const restoreSelection = () => {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    if (savedSelection) {
+      sel.addRange(savedSelection);
+    }
+  };
+
+  const handleInsertLink = () => {
+    restoreSelection();
+    if (linkData.text && linkData.url) {
+      const linkHTML = `<a href="${linkData.url}" target="_blank" rel="noopener noreferrer" class="text-orange-400 underline">${linkData.text}</a>`;
+      document.execCommand("insertHTML", false, linkHTML);
+    } else if (linkData.url) {
+      document.execCommand("createLink", false, linkData.url);
+    }
+
+    if (editorRef.current) {
+      setFormData((prev) => ({
+        ...prev,
+        description: editorRef.current.innerHTML,
+      }));
+    }
+
+    setShowLinkModal(false);
+    setLinkData({ text: "", url: "" });
+  };
+
+  const handleRemoveLink = () => {
+    restoreSelection();
+    document.execCommand("unlink", false, null);
+
+    if (editorRef.current) {
+      setFormData((prev) => ({
+        ...prev,
+        description: editorRef.current.innerHTML,
+      }));
+    }
+    setShowLinkModal(false);
+    setLinkData({ text: "", url: "" });
+  };
 
   // UI States
-  const [previewItem, setPreviewItem] = useState(null); // For lightbox
-  const [isStatusOpen, setIsStatusOpen] = useState(false); // For custom dropdown
-
+  const [previewItem, setPreviewItem] = useState(null);
+  const [isStatusOpen, setIsStatusOpen] = useState(false);
   const statusOptions = ["Ongoing", "Completed", "On Hold"];
 
   useEffect(() => {
+    // Reset UI states (Dropdowns, Help Text, Modals) whenever modal opens/closes
+    setShowLinkModal(false);
+    setActiveListMenu(null);
+    setIsStatusOpen(false);
+    setShowMediaHelp(false);
+    setIsEditingMedia(false); // Reset edit mode
+    setPreviewItem(null); // Reset preview overlay
+
     if (initialData) {
       setFormData({
         ...initialData,
@@ -67,8 +321,11 @@ export default function AddEditProjectModal({
         endDate: initialData.endDate || "",
         thumbnail: initialData.thumbnail || initialData.image || "",
       });
+      if (editorRef.current) {
+        editorRef.current.innerHTML = initialData.description || "";
+        updateListNumbering(); // Run logic on load
+      }
     } else {
-      // Reset to empty state if no initialData (for "Add Project" mode)
       setFormData({
         title: "",
         description: "",
@@ -81,16 +338,20 @@ export default function AddEditProjectModal({
         media: [],
         thumbnail: "",
       });
+      if (editorRef.current) {
+        editorRef.current.innerHTML = "";
+      }
     }
   }, [initialData, isOpen]);
 
-  useEffect(() => {
-    // Clear error when modal opens/closes
-    if (isOpen) setError("");
+  // ... (Keep existing useEffect for repos, handleChange, handleFileChange, removeMedia, setAsThumbnail, handleTagKeyDown, handleRepoSelect, getPreviewUrl, handleSubmit, renderPreviewItem, Lightbox logic, Drag and Drop logic, Edit Mode logic) ...
+  // [OMITTED FOR BREVITY - KEEP YOUR EXISTING CODE FOR THESE FUNCTIONS]
 
+  // Re-inserting the essential hooks/funcs just to be safe for the "replace" context:
+  useEffect(() => {
+    if (isOpen) setError("");
     const loadRepos = async () => {
       if (!currentUser?.uid) return;
-
       setLoadingRepos(true);
       try {
         const userProfile = await fetchUserProfile(currentUser.uid);
@@ -98,10 +359,7 @@ export default function AddEditProjectModal({
           userProfile?.githubUsername ||
           currentUser?.reloadUserInfo?.screenName;
         const token = userProfile?.githubToken;
-
-        // Save token to state for later use (languages fetch)
         setGithubToken(token);
-
         if (username) {
           const data = await fetchUserRepositories(username, token);
           setRepos(data);
@@ -112,38 +370,59 @@ export default function AddEditProjectModal({
         setLoadingRepos(false);
       }
     };
-
     if (isOpen) loadRepos();
   }, [currentUser, isOpen]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    // Clear error when user starts typing dates to fix it
-    if (name === "startDate" || name === "endDate") {
-      setError("");
-    }
+    if (name === "startDate" || name === "endDate") setError("");
   };
 
   const handleFileChange = async (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
+    // VALIDATION: Check for allowed types (Image, Video, PDF)
+    const hasInvalidFiles = files.some((file) => {
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+      const isPdf =
+        file.type === "application/pdf" ||
+        file.name.toLowerCase().endsWith(".pdf");
+      return !isImage && !isVideo && !isPdf;
+    });
+
+    if (hasInvalidFiles) {
+      setError(
+        "Invalid file type. Only images, videos, gifs, and PDFs are allowed."
+      );
+      e.target.value = ""; // Reset input so user can retry immediately
+      return;
+    }
+
+    // Clear previous errors and start upload
+    setError("");
     setUploading(true);
+
     try {
       const uploadPromises = files.map((file) => uploadFileToCloudinary(file));
       const uploadedMedia = await Promise.all(uploadPromises);
-
       setFormData((prev) => {
-        // If it's the first media and no thumbnail is set, auto-set the first one
+        // combine existing and new media
+        const allMedia = [...(prev.media || []), ...uploadedMedia];
+
+        // Find the first non-video item to use as thumbnail if one isn't set
+        const firstValidImage = allMedia.find((m) => m.type !== "video");
+
         const newThumbnail =
-          !prev.thumbnail && uploadedMedia.length > 0
-            ? getPreviewUrl(uploadedMedia[0])
+          !prev.thumbnail && firstValidImage
+            ? getPreviewUrl(firstValidImage)
             : prev.thumbnail;
 
         return {
           ...prev,
-          media: [...(prev.media || []), ...uploadedMedia],
+          media: allMedia,
           thumbnail: newThumbnail,
         };
       });
@@ -155,29 +434,29 @@ export default function AddEditProjectModal({
   };
 
   const removeMedia = (index, e) => {
-    if (e) e.stopPropagation(); // Prevent opening preview
+    if (e) e.stopPropagation();
     setFormData((prev) => {
       const itemToRemove = prev.media[index];
       const newMedia = prev.media.filter((_, i) => i !== index);
-
-      // If we removed the current thumbnail, reset thumbnail to the first available item or empty
       let newThumbnail = prev.thumbnail;
-      if (getPreviewUrl(itemToRemove) === prev.thumbnail) {
-        newThumbnail = newMedia.length > 0 ? getPreviewUrl(newMedia[0]) : "";
-      }
 
-      return {
-        ...prev,
-        media: newMedia,
-        thumbnail: newThumbnail,
-      };
+      // If we removed the thumbnail, try to find the next valid image
+      if (getPreviewUrl(itemToRemove) === prev.thumbnail) {
+        const nextValidImage = newMedia.find((m) => m.type !== "video");
+        newThumbnail = nextValidImage ? getPreviewUrl(nextValidImage) : "";
+      }
+      return { ...prev, media: newMedia, thumbnail: newThumbnail };
     });
   };
 
   const setAsThumbnail = (item, e) => {
-    if (e) e.stopPropagation(); // Prevent opening preview
+    if (e) e.stopPropagation();
+    // Prevent videos from being set as thumbnail
+    if (item.type === "video") return;
+
     const url = getPreviewUrl(item);
     setFormData((prev) => ({ ...prev, thumbnail: url }));
+    setError(""); // Clear error when a thumbnail is selected
   };
 
   const handleTagKeyDown = (e) => {
@@ -197,39 +476,44 @@ export default function AddEditProjectModal({
     const repoId = e.target.value;
     if (!repoId) return;
     const selectedRepo = repos.find((r) => r.id.toString() === repoId);
-
     if (selectedRepo) {
       const cleanTitle = selectedRepo.name.split("/").pop();
       let repoTags = [];
-
-      // Fetch all languages if the URL exists
       if (selectedRepo.languages_url) {
         try {
-          // Pass the stored token here
           repoTags = await fetchRepoLanguages(
             selectedRepo.languages_url,
             githubToken
           );
         } catch (error) {
-          // Fallback to primary language if fetch fails
           if (selectedRepo.language) repoTags = [selectedRepo.language];
         }
       } else if (selectedRepo.language) {
         repoTags = [selectedRepo.language];
       }
 
+      const newDescription = selectedRepo.description || "";
+
+      // Update State
       setFormData((prev) => ({
         ...prev,
         title: cleanTitle,
-        description: selectedRepo.description || "",
+        description: newDescription,
         githubLink: selectedRepo.html_url,
         tags: repoTags,
       }));
+
+      // FIX: Manually update the Rich Text Editor visual content
+      if (editorRef.current) {
+        editorRef.current.innerHTML = newDescription;
+      }
     }
   };
 
   const getPreviewUrl = (item) => {
     if (!item.url) return "";
+
+    // Handle PDFs
     if (
       item.originalFormat === "pdf" ||
       item.type === "pdf" ||
@@ -237,79 +521,94 @@ export default function AddEditProjectModal({
     ) {
       return item.url.replace(/\.pdf$/i, ".jpg");
     }
+
+    // Handle Videos: Replace extension with .jpg to get Cloudinary thumbnail
+    if (item.type === "video" || item.url.match(/\.(mp4|mov|webm|mkv)$/i)) {
+      return item.url.replace(/\.[^/.]+$/, ".jpg");
+    }
+
     return item.url;
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setError("");
-
     const { startDate, endDate, status } = formData;
 
-    // 1. End date cannot be before start date
-    if (startDate && endDate) {
-      if (new Date(endDate) < new Date(startDate)) {
-        setError("End date cannot be earlier than start date");
-        return;
-      }
+    // 1. Date & Status Validations
+    if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
+      setError("End date cannot be earlier than start date");
+      return;
     }
-
-    // 2. If BOTH dates exist → project MUST be Completed
     if (startDate && endDate && status !== "Completed") {
       setError(
         "Projects with both start and end dates must be marked as Completed"
       );
       return;
     }
-
-    // 3. If status is Completed → BOTH dates are required
     if (status === "Completed" && (!startDate || !endDate)) {
       setError("Completed projects must have both start and end dates");
       return;
     }
-
-    // 4. If status is Ongoing or On Hold → end date must NOT exist
     if ((status === "Ongoing" || status === "On Hold") && endDate) {
       setError("Ongoing or On Hold projects cannot have an end date");
       return;
     }
 
-    // Thumbnail fallback
-    let finalThumbnail = formData.thumbnail;
-    if (!finalThumbnail && formData.media && formData.media.length > 0) {
-      finalThumbnail = getPreviewUrl(formData.media[0]);
+    // 2. Description Validation (Strip HTML tags to check for real text)
+    const plainTextDescription = formData.description
+      ? formData.description.replace(/<[^>]+>/g, "").trim()
+      : "";
+
+    if (!plainTextDescription) {
+      setError("Please add a description for your project.");
+      return;
     }
 
-    onSave({
-      ...formData,
-      image: finalThumbnail,
-    });
+    // 3. Thumbnail Calculation & Validation
+    let finalThumbnail = formData.thumbnail;
+
+    // If no manual thumbnail set, try to auto-select first NON-VIDEO media
+    if (!finalThumbnail && formData.media && formData.media.length > 0) {
+      const firstValidImage = formData.media.find((m) => m.type !== "video");
+      if (firstValidImage) {
+        finalThumbnail = getPreviewUrl(firstValidImage);
+      }
+    }
+
+    if (!finalThumbnail) {
+      setError("Please upload an image and set it as the project thumbnail.");
+      return;
+    }
+
+    onSave({ ...formData, image: finalThumbnail });
   };
 
   const renderPreviewItem = (item) => {
     const previewUrl = getPreviewUrl(item);
 
-    if (item.type === "video") {
-      return (
-        <div className="w-full h-full flex items-center justify-center text-gray-500 bg-gray-900 border border-white/5">
-          <Film size={20} />
-        </div>
-      );
-    }
+    // Render the generated thumbnail for both images and videos
     return (
-      <img
-        src={previewUrl}
-        alt="preview"
-        className="w-full h-full object-cover"
-        onError={(e) => {
-          e.target.onerror = null;
-          e.target.src = "https://via.placeholder.com/150?text=No+Preview";
-        }}
-      />
+      <>
+        <img
+          src={previewUrl}
+          alt="preview"
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            e.target.onerror = null;
+            e.target.src = "https://via.placeholder.com/150?text=No+Preview";
+          }}
+        />
+        {/* Overlay icon for videos */}
+        {item.type === "video" && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
+            <Film size={20} className="text-white/90 drop-shadow-md" />
+          </div>
+        )}
+      </>
     );
   };
 
-  // Lightbox Navigation Logic
   const handleNextMedia = (e) => {
     e.stopPropagation();
     const currentIndex = formData.media.indexOf(previewItem);
@@ -317,7 +616,6 @@ export default function AddEditProjectModal({
       setPreviewItem(formData.media[currentIndex + 1]);
     }
   };
-
   const handlePrevMedia = (e) => {
     e.stopPropagation();
     const currentIndex = formData.media.indexOf(previewItem);
@@ -325,20 +623,13 @@ export default function AddEditProjectModal({
       setPreviewItem(formData.media[currentIndex - 1]);
     }
   };
-
-  // --- Drag and Drop Handlers ---
   const [draggedIndex, setDraggedIndex] = useState(null);
-
   const handleDragStart = (e, index) => {
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = "move";
   };
-
-  // Swaps items immediately when entering a new position (Interactive Sorting)
   const handleDragEnter = (e, index) => {
     if (draggedIndex === null || draggedIndex === index) return;
-
-    // If we are in edit mode, sort the tempMedia
     if (isEditingMedia) {
       setTempMedia((prev) => {
         const newMedia = [...prev];
@@ -347,7 +638,6 @@ export default function AddEditProjectModal({
         return newMedia;
       });
     } else {
-      // Normal mode sorting
       setFormData((prev) => {
         const newMedia = [...prev.media];
         const [movedItem] = newMedia.splice(draggedIndex, 1);
@@ -357,36 +647,29 @@ export default function AddEditProjectModal({
     }
     setDraggedIndex(index);
   };
-
   const handleDragOver = (e) => {
-    e.preventDefault(); // Necessary to allow dropping
+    e.preventDefault();
     e.dataTransfer.dropEffect = "move";
   };
-
   const handleDrop = (e) => {
     e.preventDefault();
     setDraggedIndex(null);
   };
-
-  // --- Media Edit Mode Logic ---
   const [isEditingMedia, setIsEditingMedia] = useState(false);
   const [tempMedia, setTempMedia] = useState([]);
-
+  const [showMediaHelp, setShowMediaHelp] = useState(false); // NEW STATE
   const handleEnterEditMode = () => {
     setTempMedia([...(formData.media || [])]);
     setIsEditingMedia(true);
   };
-
   const handleCancelEdit = () => {
     setIsEditingMedia(false);
     setTempMedia([]);
   };
-
   const handleSaveMedia = () => {
     setFormData((prev) => ({ ...prev, media: tempMedia }));
     setIsEditingMedia(false);
   };
-
   const updateMediaTitle = (index, newTitle) => {
     setTempMedia((prev) => {
       const updated = [...prev];
@@ -399,56 +682,29 @@ export default function AddEditProjectModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      {/* Scrollbar Hiding, Autofill Fix & Date Picker Theme */}
+      {/* ... [STYLES KEPT AS IS] ... */}
       <style>{`
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        /* Prevent background change on autocomplete */
-        input:-webkit-autofill,
-        input:-webkit-autofill:hover, 
-        input:-webkit-autofill:focus, 
-        input:-webkit-autofill:active{
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: #ffffff;
-            transition: background-color 5000s ease-in-out 0s;
-            box-shadow: inset 0 0 20px 20px 23232329;
-        }
-
-        /* Custom Date Picker Theme */
-        input[type="date"] {
-            color-scheme: dark; /* Forces the calendar popup to use the browser's dark mode */
-        }
-        /* Style the calendar icon */
-        input[type="date"]::-webkit-calendar-picker-indicator {
-            filter: invert(1); /* Turns the default black icon to white */
-            cursor: pointer;
-            opacity: 0.6;
-            transition: all 0.2s;
-        }
-        /* Hover effect for the icon - turns it orange */
-        input[type="date"]::-webkit-calendar-picker-indicator:hover {
-            opacity: 1;
-            filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(346deg) brightness(118%) contrast(119%);
-        }
+        input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active{ -webkit-background-clip: text; -webkit-text-fill-color: #ffffff; transition: background-color 5000s ease-in-out 0s; box-shadow: inset 0 0 20px 20px 23232329; }
+        input[type="date"] { color-scheme: dark; }
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; opacity: 0.6; transition: all 0.2s; }
+        input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(346deg) brightness(118%) contrast(119%); }
       `}</style>
 
-      {/* Lightbox Preview */}
+      {/* ... [PREVIEW MODAL KEPT AS IS] ... */}
       {previewItem && (
         <div
           className="fixed inset-0 z-[70] bg-black/95 flex items-center justify-center p-4"
           onClick={() => setPreviewItem(null)}
         >
-          {/* Close Button */}
           <button className="absolute top-6 right-6 text-gray-400 hover:text-white transition-colors z-[80]">
             <X size={32} />
           </button>
-
           <div
             className="relative w-full h-full flex items-center justify-center"
-            onClick={(e) => e.stopPropagation()} // Prevent close when clicking content
+            onClick={(e) => e.stopPropagation()}
           >
-            {/* Prev Button */}
             {formData.media.indexOf(previewItem) > 0 && (
               <button
                 onClick={handlePrevMedia}
@@ -457,8 +713,6 @@ export default function AddEditProjectModal({
                 <ChevronLeft size={32} />
               </button>
             )}
-
-            {/* Media Content */}
             <div className="max-w-[90vw] max-h-[85vh] overflow-hidden rounded-lg shadow-2xl">
               {previewItem.type === "video" ? (
                 <video
@@ -474,8 +728,6 @@ export default function AddEditProjectModal({
                 />
               )}
             </div>
-
-            {/* Next Button */}
             {formData.media.indexOf(previewItem) <
               formData.media.length - 1 && (
               <button
@@ -493,15 +745,13 @@ export default function AddEditProjectModal({
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose}
       />
-
       <div className="relative w-full max-w-4xl bg-[#0B1120] border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-4">
-        {/* Header */}
+        {/* ... [HEADER KEPT AS IS] ... */}
         <div className="flex items-center justify-between p-6 border-b border-white/5">
           <div className="flex items-center gap-4 flex-wrap">
             <h2 className="text-xl font-bold text-white">
               {initialData ? "Edit Project" : "Create Project"}
             </h2>
-            {/* Custom Error Message */}
             {error && (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg animate-in fade-in slide-in-from-left-2">
                 <AlertCircle size={14} className="text-red-500" />
@@ -510,6 +760,16 @@ export default function AddEditProjectModal({
                 </span>
               </div>
             )}
+            {/* Video Banner Warning */}
+            {formData.media.length > 0 &&
+              formData.media.every((m) => m.type === "video") && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg animate-in fade-in slide-in-from-left-2">
+                  <Info size={14} className="text-amber-500" />
+                  <span className="text-xs font-medium text-amber-500">
+                    A non-video media is required for the project thumbnail.
+                  </span>
+                </div>
+              )}
           </div>
           <button
             onClick={onClose}
@@ -519,10 +779,9 @@ export default function AddEditProjectModal({
           </button>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
           <form id="project-form" onSubmit={handleSubmit} className="space-y-8">
-            {/* 1. Media Upload & Thumbnail Selection */}
+            {/* ... [MEDIA UPLOAD SECTION KEPT AS IS] ... */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-400 flex items-center gap-2">
@@ -542,9 +801,8 @@ export default function AddEditProjectModal({
                   </button>
                 )}
               </div>
-
               {isEditingMedia ? (
-                /* --- EDIT MODE LIST --- */
+                /* ... Edit Mode List ... */
                 <div className="bg-black/20 border border-white/5 rounded-xl p-3 space-y-2 animate-in fade-in slide-in-from-right-4 duration-300">
                   <div className="max-h-[300px] overflow-y-auto scrollbar-hide space-y-2">
                     {tempMedia.map((item, idx) => (
@@ -561,30 +819,24 @@ export default function AddEditProjectModal({
                             : "opacity-100 hover:border-white/20"
                         }`}
                       >
-                        {/* Drag Handle & Number */}
                         <div className="flex items-center gap-2 cursor-grab text-gray-500 hover:text-white">
                           <GripVertical size={16} />
                           <span className="text-xs font-mono font-medium text-gray-400">
                             {idx + 1}.
                           </span>
                         </div>
-
-                        {/* Preview */}
-                        <div className="w-12 h-12 flex-shrink-0 rounded overflow-hidden border border-white/10 bg-black">
-                          {item.type === "video" ? (
-                            <div className="w-full h-full flex items-center justify-center text-gray-500">
-                              <Film size={16} />
+                        <div className="w-12 h-12 flex-shrink-0 rounded overflow-hidden border border-white/10 bg-black relative">
+                          <img
+                            src={getPreviewUrl(item)}
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
+                          {item.type === "video" && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
+                              <Film size={16} className="text-white/90" />
                             </div>
-                          ) : (
-                            <img
-                              src={getPreviewUrl(item)}
-                              alt=""
-                              className="w-full h-full object-cover"
-                            />
                           )}
                         </div>
-
-                        {/* Title Input */}
                         <div className="flex-grow">
                           <input
                             type="text"
@@ -599,8 +851,6 @@ export default function AddEditProjectModal({
                       </div>
                     ))}
                   </div>
-
-                  {/* Edit Mode Footer */}
                   <div className="flex justify-end gap-2 pt-2 border-t border-white/5">
                     <button
                       type="button"
@@ -619,7 +869,7 @@ export default function AddEditProjectModal({
                   </div>
                 </div>
               ) : (
-                /* --- NORMAL GRID VIEW --- */
+                /* ... Normal Grid View ... */
                 <>
                   <div className="flex flex-wrap gap-3 mb-3 animate-in fade-in zoom-in duration-300">
                     {formData.media?.map((item, idx) => {
@@ -627,7 +877,6 @@ export default function AddEditProjectModal({
                         getPreviewUrl(item) === formData.thumbnail;
                       return (
                         <div
-                          /* key changed to item.url to help React track element movement */
                           key={item.url || idx}
                           draggable
                           onDragStart={(e) => handleDragStart(e, idx)}
@@ -635,10 +884,7 @@ export default function AddEditProjectModal({
                           onDragEnter={(e) => handleDragEnter(e, idx)}
                           onDrop={handleDrop}
                           onClick={() => setPreviewItem(item)}
-                          className={`relative w-20 h-20 rounded-lg overflow-hidden border group bg-black/40 cursor-pointer 
-                          transition-all duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1.0)] 
-                          hover:scale-105 hover:z-10 hover:shadow-xl
-                          ${
+                          className={`relative w-20 h-20 rounded-lg overflow-hidden border group bg-black/40 cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1.0)] hover:scale-105 hover:z-10 hover:shadow-xl ${
                             isThumbnail
                               ? "border-orange-500 ring-1 ring-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.5)]"
                               : "border-white/10 hover:border-white/30"
@@ -648,31 +894,30 @@ export default function AddEditProjectModal({
                               : "opacity-100"
                           }`}
                         >
-                          {/* Number Indicator */}
                           <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[10px] font-bold px-1.5 py-0.5 rounded z-10 pointer-events-none">
                             {idx + 1}
                           </div>
-
                           {renderPreviewItem(item)}
-
-                          {/* Hover Overlay: Icons top-right with black bg */}
                           <div className="absolute inset-0 group-hover:bg-black/10 transition-colors">
                             <div className="absolute top-1 right-1 flex gap-1 bg-black/80 rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
-                              <button
-                                type="button"
-                                onClick={(e) => setAsThumbnail(item, e)}
-                                title="Set as Thumbnail"
-                                className={`p-0.5 rounded transition-colors ${
-                                  isThumbnail
-                                    ? "text-orange-500"
-                                    : "text-gray-400 hover:text-orange-400 hover:bg-white/10"
-                                }`}
-                              >
-                                <Star
-                                  size={14}
-                                  fill={isThumbnail ? "currentColor" : "none"}
-                                />
-                              </button>
+                              {/* Only show Star button if NOT a video */}
+                              {item.type !== "video" && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => setAsThumbnail(item, e)}
+                                  title="Set as Thumbnail"
+                                  className={`p-0.5 rounded transition-colors ${
+                                    isThumbnail
+                                      ? "text-orange-500"
+                                      : "text-gray-400 hover:text-orange-400 hover:bg-white/10"
+                                  }`}
+                                >
+                                  <Star
+                                    size={14}
+                                    fill={isThumbnail ? "currentColor" : "none"}
+                                  />
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={(e) => removeMedia(idx, e)}
@@ -683,8 +928,6 @@ export default function AddEditProjectModal({
                               </button>
                             </div>
                           </div>
-
-                          {/* PDF Indicator */}
                           {(item.originalFormat === "pdf" ||
                             item.url.toLowerCase().endsWith(".pdf")) && (
                             <div className="absolute bottom-1 right-1 pointer-events-none">
@@ -697,7 +940,6 @@ export default function AddEditProjectModal({
                         </div>
                       );
                     })}
-
                     <label className="w-20 h-20 border-2 border-dashed border-white/10 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 hover:border-orange-500/50 transition-all duration-300 group">
                       {uploading ? (
                         <Loader2
@@ -719,14 +961,48 @@ export default function AddEditProjectModal({
                       />
                     </label>
                   </div>
-                  <p className="text-xs text-gray-600">
-                    Click media to preview. Click star to set cover.
-                  </p>
+
+                  {/* NEW: Interactive Help Text */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowMediaHelp(!showMediaHelp)}
+                      className="flex items-center gap-1.5 text-xs font-medium text-amber-500 hover:text-amber-400 transition-colors"
+                    >
+                      <Info size={14} />
+                      <span>Click media to preview</span>
+                    </button>
+
+                    {showMediaHelp && (
+                      <div className="absolute top-full left-0 mt-2 z-20 w-64 p-3 bg-[#0B1120] border border-white/10 rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                        <ul className="space-y-2 text-xs text-gray-400">
+                          <li className="flex gap-2">
+                            <Star
+                              size={12}
+                              className="mt-0.5 text-orange-500"
+                            />
+                            <span>Click star to set project cover</span>
+                          </li>
+                          <li className="flex gap-2">
+                            <GripVertical
+                              size={12}
+                              className="mt-0.5 text-gray-500"
+                            />
+                            <span>Drag and drop to re-arrange</span>
+                          </li>
+                          <li className="flex gap-2">
+                            <Edit size={12} className="mt-0.5 text-blue-500" />
+                            <span>Use 'Edit Details' to set titles</span>
+                          </li>
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </div>
 
-            {/* 2. GitHub Integration */}
+            {/* ... [GITHUB & BASIC INFO SECTIONS KEPT AS IS] ... */}
             <div className="bg-blue-900/10 border border-blue-500/20 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2 text-blue-400">
                 <Github size={16} />
@@ -748,7 +1024,6 @@ export default function AddEditProjectModal({
               </select>
             </div>
 
-            {/* 3. Basic Info */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-400">
@@ -764,14 +1039,11 @@ export default function AddEditProjectModal({
                   placeholder="Project Name"
                 />
               </div>
-
-              {/* Date Inputs (Start & End) */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-400">
                   Timeline (Optional)
                 </label>
                 <div className="flex gap-2">
-                  {/* Start Date */}
                   <div
                     className={`relative w-1/2 bg-black/30 border rounded-xl px-4 py-3 flex items-center focus-within:border-orange-500/50 transition-all ${
                       error ? "border-red-500/50" : "border-white/10"
@@ -789,8 +1061,6 @@ export default function AddEditProjectModal({
                       className="w-full h-full bg-transparent text-sm text-white focus:outline-none cursor-pointer"
                     />
                   </div>
-
-                  {/* End Date */}
                   <div
                     className={`relative w-1/2 bg-black/30 border rounded-xl px-4 py-3 flex items-center focus-within:border-orange-500/50 transition-all ${
                       error ? "border-red-500/50" : "border-white/10"
@@ -812,29 +1082,245 @@ export default function AddEditProjectModal({
               </div>
             </div>
 
-            {/* 4. Description */}
+            {/* 4. Description (Rich Text Editor) - UPDATED CSS AND LOGIC */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-400">
                 Description
               </label>
-              <textarea
-                required
-                name="description"
-                rows={5}
-                value={formData.description}
-                onChange={handleChange}
-                className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-orange-500/50 focus:outline-none resize-none"
-                placeholder="Details about the project..."
-              />
+              <div className="w-full bg-black/30 border border-white/10 rounded-xl overflow-hidden focus-within:border-orange-500/50 transition-colors relative">
+                {/* Toolbar */}
+                <div className="flex items-center gap-1 p-2 border-b border-white/10 bg-white/5 flex-wrap">
+                  {[
+                    { cmd: "bold", icon: Bold, title: "Bold" },
+                    { cmd: "italic", icon: Italic, title: "Italic" },
+                    { cmd: "underline", icon: Underline, title: "Underline" },
+                    {
+                      cmd: "strikeThrough",
+                      icon: Strikethrough,
+                      title: "Strikethrough",
+                    },
+                  ].map(({ cmd, icon: Icon, title }) => (
+                    <button
+                      key={cmd}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => execCommand(cmd)}
+                      className={`p-1.5 rounded transition-colors ${
+                        activeFormats[cmd]
+                          ? "text-orange-500 bg-white/10"
+                          : "text-gray-400 hover:text-white hover:bg-white/10"
+                      }`}
+                      title={title}
+                    >
+                      <Icon size={16} />
+                    </button>
+                  ))}
+                  <div className="w-px h-4 bg-white/20 mx-1" />
+
+                  {/* List Controls */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() =>
+                        setActiveListMenu(activeListMenu === "ul" ? null : "ul")
+                      }
+                      className={`p-1.5 rounded transition-colors flex items-center gap-0.5 ${
+                        activeFormats.insertUnorderedList
+                          ? "text-orange-500 bg-white/10"
+                          : "text-gray-400 hover:text-white hover:bg-white/10"
+                      }`}
+                      title="Bullet Options"
+                    >
+                      <List size={16} />
+                      <ChevronDown size={10} />
+                    </button>
+                    {activeListMenu === "ul" && (
+                      <div className="absolute top-full left-0 mt-1 w-32 bg-[#0B1120] border border-white/20 rounded-lg shadow-xl z-30 overflow-hidden">
+                        {[
+                          { label: "● Disc", value: "disc" },
+                          { label: "○ Circle", value: "circle" },
+                          { label: "■ Square", value: "square" },
+                        ].map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() =>
+                              applyListStyle("insertUnorderedList", opt.value)
+                            }
+                            className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                              activeFormats.ulStyle === opt.value
+                                ? "bg-orange-500/20 text-orange-500 font-bold"
+                                : "text-gray-300 hover:bg-white/10 hover:text-white"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() =>
+                        setActiveListMenu(activeListMenu === "ol" ? null : "ol")
+                      }
+                      className={`p-1.5 rounded transition-colors flex items-center gap-0.5 ${
+                        activeFormats.insertOrderedList
+                          ? "text-orange-500 bg-white/10"
+                          : "text-gray-400 hover:text-white hover:bg-white/10"
+                      }`}
+                      title="Number Options"
+                    >
+                      <ListOrdered size={16} />
+                      <ChevronDown size={10} />
+                    </button>
+                    {activeListMenu === "ol" && (
+                      <div className="absolute top-full left-0 mt-1 w-32 bg-[#0B1120] border border-white/20 rounded-lg shadow-xl z-30 overflow-hidden">
+                        {[
+                          { label: "1, 2, 3", value: "1" },
+                          { label: "a, b, c", value: "a" },
+                          { label: "A, B, C", value: "A" },
+                          { label: "i, ii, iii", value: "i" },
+                          { label: "I, II, III", value: "I" },
+                        ].map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() =>
+                              applyListStyle("insertOrderedList", opt.value)
+                            }
+                            className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                              activeFormats.olStyle === opt.value
+                                ? "bg-orange-500/20 text-orange-500 font-bold"
+                                : "text-gray-300 hover:bg-white/10 hover:text-white"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="w-px h-4 bg-white/20 mx-1" />
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      saveSelection();
+                      if (activeFormats.isLink) {
+                        setLinkData((prev) => ({
+                          ...prev,
+                          url: activeFormats.linkUrl,
+                        }));
+                      }
+                      setShowLinkModal(true);
+                    }}
+                    className={`p-1.5 rounded transition-colors ${
+                      activeFormats.isLink
+                        ? "text-orange-500 bg-white/10"
+                        : "text-gray-400 hover:text-white hover:bg-white/10"
+                    }`}
+                    title="Hyperlink"
+                  >
+                    <LinkIcon size={16} />
+                  </button>
+                </div>
+
+                {/* Editor Content Area - UPDATED CLASSNAME */}
+                <div
+                  ref={editorRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onKeyDown={handleEditorKeyDown}
+                  onInput={(e) => {
+                    const html = e.currentTarget.innerHTML;
+                    updateListNumbering(); // Run logic on every input
+                    setFormData((prev) => ({ ...prev, description: html }));
+                    setError(""); // Clear error when typing description
+                  }}
+                  onKeyUp={checkFormats}
+                  onMouseUp={checkFormats}
+                  // FIX: Removed all custom CSS counters.
+                  // Now relies on JS `updateListNumbering` to inject `start` attributes, and browser default styles.
+                  className="w-full h-64 p-4 text-white overflow-y-auto focus:outline-none scrollbar-hide [&_ul]:list-disc [&_ul]:pl-8 [&_ol]:list-decimal [&_ol]:pl-8"
+                  style={{ minHeight: "150px" }}
+                />
+
+                {/* Link Modal Popup */}
+                {showLinkModal && (
+                  <div className="absolute top-10 left-2 z-20 bg-[#0B1120] border border-white/20 rounded-lg shadow-xl p-3 w-72 animate-in fade-in zoom-in duration-200">
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-gray-400 uppercase">
+                        Insert Link
+                      </h4>
+                      <input
+                        type="text"
+                        placeholder="Text to display"
+                        value={linkData.text}
+                        onChange={(e) =>
+                          setLinkData((prev) => ({
+                            ...prev,
+                            text: e.target.value,
+                          }))
+                        }
+                        className="w-full bg-black/50 border border-white/10 rounded px-2 py-1 text-sm text-white focus:border-orange-500/50 outline-none"
+                      />
+                      <input
+                        type="url"
+                        placeholder="https://example.com"
+                        value={linkData.url}
+                        onChange={(e) =>
+                          setLinkData((prev) => ({
+                            ...prev,
+                            url: e.target.value,
+                          }))
+                        }
+                        className="w-full bg-black/50 border border-white/10 rounded px-2 py-1 text-sm text-white focus:border-orange-500/50 outline-none"
+                      />
+                      <div className="flex justify-end gap-2 items-center">
+                        <button
+                          type="button"
+                          onClick={() => setShowLinkModal(false)}
+                          className="px-2 py-1 text-xs text-gray-400 hover:text-white"
+                        >
+                          Cancel
+                        </button>
+                        {activeFormats.isLink && (
+                          <button
+                            type="button"
+                            onClick={handleRemoveLink}
+                            className="px-2 py-1 text-xs text-red-400 hover:text-red-300 hover:bg-white/5 rounded"
+                          >
+                            Remove Link
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleInsertLink}
+                          className="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-500 font-bold"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* 5. Status & Tags */}
+            {/* ... [STATUS & TAGS SECTIONS KEPT AS IS] ... */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Custom Status Dropdown */}
               <div className="space-y-2 relative">
-                <label className="text-sm font-medium text-gray-400">
-                  Status
-                </label>
+                <div className="h-9 flex items-center">
+                  <label className="text-sm font-medium text-gray-400">
+                    Status
+                  </label>
+                </div>
                 <div className="relative">
                   <button
                     type="button"
@@ -849,7 +1335,6 @@ export default function AddEditProjectModal({
                       }`}
                     />
                   </button>
-
                   {isStatusOpen && (
                     <div className="absolute top-full left-0 right-0 mt-2 bg-[#0B1120] border border-white/10 rounded-xl shadow-xl z-20 overflow-hidden">
                       {statusOptions.map((option) => (
@@ -875,17 +1360,25 @@ export default function AddEditProjectModal({
                   )}
                 </div>
               </div>
-
-              {/* Tags */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-400">
-                  Tags (Press Enter)
-                </label>
-                <div className="w-full bg-black/30 border border-white/10 rounded-xl px-2 py-2 flex flex-wrap gap-2 overflow-hidden items-start">
+                <div className="flex items-center justify-between h-9">
+                  <label className="text-sm font-medium text-gray-400">
+                    Tags (Press Enter)
+                  </label>
+                  <input
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={handleTagKeyDown}
+                    className="w-1/2 bg-black/30 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:border-orange-500/50 outline-none transition-colors placeholder:text-gray-600"
+                    placeholder="Type & Enter to add..."
+                  />
+                </div>
+                <div className="w-full bg-black/30 border border-white/10 rounded-xl px-2 py-2 flex flex-wrap gap-2 h-32 overflow-y-auto content-start scrollbar-hide">
                   {formData.tags.map((tag, i) => (
                     <span
                       key={i}
-                      title={tag} // Native tooltip added here
+                      title={tag}
                       className="bg-white/10 px-2 py-1 rounded text-sm flex items-center gap-1 border border-white/5 max-w-full cursor-help"
                     >
                       <span className="truncate break-all">{tag}</span>
@@ -903,19 +1396,11 @@ export default function AddEditProjectModal({
                       </button>
                     </span>
                   ))}
-                  <input
-                    type="text"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={handleTagKeyDown}
-                    className="bg-transparent outline-none flex-grow min-w-[80px] text-sm h-7 text-white placeholder:text-gray-600"
-                    placeholder="Add tag..."
-                  />
                 </div>
               </div>
             </div>
 
-            {/* 6. Links */}
+            {/* ... [LINKS SECTION KEPT AS IS] ... */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-400">
@@ -945,7 +1430,6 @@ export default function AddEditProjectModal({
           </form>
         </div>
 
-        {/* Footer */}
         <div className="p-6 border-t border-white/5 flex justify-end gap-3 bg-black/20 rounded-b-2xl backdrop-blur-md">
           <button
             onClick={onClose}

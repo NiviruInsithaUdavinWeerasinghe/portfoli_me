@@ -37,8 +37,21 @@ export default function ProjectViewModal({ project, isOpen, onClose }) {
 
     // If a thumbnail/image exists, move it to the front of the list
     const thumbUrl = project.thumbnail || project.image;
+
     if (thumbUrl) {
-      const thumbIndex = baseMedia.findIndex((m) => m.url === thumbUrl);
+      // Find index by checking direct URL match OR if the item's generated preview matches the thumbnail (for PDFs)
+      const thumbIndex = baseMedia.findIndex((m) => {
+        if (m.url === thumbUrl) return true;
+        // Check if it's a PDF whose preview matches the stored thumbnail URL
+        if (
+          (m.type === "pdf" || m.url?.toLowerCase().endsWith(".pdf")) &&
+          m.url.replace(/\.pdf$/i, ".jpg") === thumbUrl
+        ) {
+          return true;
+        }
+        return false;
+      });
+
       if (thumbIndex > -1) {
         const [thumbnailItem] = baseMedia.splice(thumbIndex, 1);
         baseMedia.unshift(thumbnailItem);
@@ -76,6 +89,10 @@ export default function ProjectViewModal({ project, isOpen, onClose }) {
         "/upload/pg_1,w_300,h_300,c_fill,f_jpg/"
       );
     }
+    // NEW: Handle Video Thumbnails
+    if (item.type === "video" || item.url.match(/\.(mp4|mov|webm|mkv)$/i)) {
+      return item.url.replace(/\.[^/.]+$/, ".jpg");
+    }
     return item.url;
   };
 
@@ -97,7 +114,8 @@ export default function ProjectViewModal({ project, isOpen, onClose }) {
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-6xl h-[85vh] bg-[#0B1120] border border-white/10 rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden animate-in zoom-in-95 duration-300">
+      <div className="relative w-full max-w-[90vw] h-[90vh] bg-[#0B1120] border border-white/10 rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden animate-in zoom-in-95 duration-300">
+        {" "}
         {/* --- LEFT SIDE: MEDIA VIEWER --- */}
         <div className="w-full md:w-2/3 bg-black/50 relative flex items-center justify-center overflow-hidden border-b md:border-b-0 md:border-r border-white/10 group">
           {/* Loading Spinner - Shows only when media is NOT loaded and NOT a PDF */}
@@ -181,30 +199,32 @@ export default function ProjectViewModal({ project, isOpen, onClose }) {
                 <button
                   key={idx}
                   onClick={() => setActiveMediaIndex(idx)}
-                  className={`w-12 h-12 rounded-lg overflow-hidden border-2 flex-shrink-0 transition-all bg-black/40 ${
+                  className={`w-12 h-12 rounded-lg overflow-hidden border-2 flex-shrink-0 transition-all bg-black/40 relative ${
                     activeMediaIndex === idx
                       ? "border-orange-500 scale-110 opacity-100"
                       : "border-white/20 opacity-60 hover:opacity-100"
                   }`}
                 >
-                  {m.type === "video" ? (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Play size={16} className="text-white" />
+                  {/* Always render the image thumbnail (works for images, PDFs, and now Videos) */}
+                  <img
+                    src={getThumbnailUrl(m)}
+                    className="w-full h-full object-cover"
+                    alt="thumb"
+                  />
+                  {/* Overlay Play Icon for Videos */}
+                  {m.type === "video" && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                      <Play
+                        size={16}
+                        className="text-white/90 drop-shadow-md"
+                      />
                     </div>
-                  ) : (
-                    // This handles Image AND PDF thumbnails (via .jpg replacement)
-                    <img
-                      src={getThumbnailUrl(m)}
-                      className="w-full h-full object-cover"
-                      alt="thumb"
-                    />
                   )}
                 </button>
               ))}
             </div>
           )}
         </div>
-
         {/* --- RIGHT SIDE: DETAILS --- */}
         <div className="w-full md:w-1/3 flex flex-col h-full bg-[#0B1120]">
           {/* Header Actions */}
@@ -252,10 +272,17 @@ export default function ProjectViewModal({ project, isOpen, onClose }) {
                 <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-3">
                   About Project
                 </h3>
-                {/* Added break-all to ensure long strings wrap correctly */}
-                <p className="text-gray-400 leading-relaxed font-light whitespace-pre-wrap break-all">
-                  {project.description}
-                </p>
+                <div
+                  // Updated CSS to support deeper nesting (_) and allow inline styles to work (removed explicit list-style overrides)
+                  className="text-gray-400 leading-relaxed font-light break-words 
+                    [&_ul]:list-disc [&_ul]:pl-8 [&_ul]:mb-2 
+                    [&_ol]:list-decimal [&_ol]:pl-8 [&_ol]:mb-2 
+                    [&_li]:pl-1
+                    [&_a]:text-orange-400 [&_a]:underline [&_a]:hover:text-orange-300
+                    [&_b]:font-bold [&_strong]:font-bold
+                    [&_i]:italic [&_em]:italic"
+                  dangerouslySetInnerHTML={{ __html: project.description }}
+                />
               </div>
 
               <div>
