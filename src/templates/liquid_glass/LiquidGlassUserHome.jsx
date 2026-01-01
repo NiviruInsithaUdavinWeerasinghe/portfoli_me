@@ -1,8 +1,13 @@
 //C:\PortfoliMe\portfoli_me\src\templates\liquid_glass\LiquidGlassUserHome.jsx
 
 import React, { useState, useEffect } from "react";
-import { useOutletContext, Link, useNavigate } from "react-router-dom"; // --- NEW IMPORTS START ---
-import { collection, getDocs } from "firebase/firestore";
+import {
+  useOutletContext,
+  Link,
+  useNavigate,
+  useParams,
+} from "react-router-dom"; // --- NEW IMPORTS START ---
+import { collection, getDocs, onSnapshot, doc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 // --- NEW IMPORTS END ---
 import {
@@ -151,7 +156,15 @@ export default function LiquidGlassUserHome() {
   // UPDATED: Destructure setIsEditMode
   const { isEditMode, setIsEditMode } = useOutletContext();
   const { currentUser } = useAuth();
-  const navigate = useNavigate(); // Added hook
+  const navigate = useNavigate();
+  const { username } = useParams(); // Get UID from URL
+
+  // Determine Target UID (URL param takes precedence)
+  const targetUid = username || currentUser?.uid;
+  const isOwner = currentUser?.uid === targetUid;
+
+  // Force edit mode off if not owner
+  const effectiveEditMode = isOwner && isEditMode;
 
   // NEW: Handler for the Add Project logic
   const handleAddProjectRedirect = () => {
@@ -176,10 +189,13 @@ export default function LiquidGlassUserHome() {
 
   // -- State Management --
   const [loading, setLoading] = useState(true);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  // Renamed to distinguish viewer's internet vs profile's status
+  const [viewerIsOnline, setViewerIsOnline] = useState(navigator.onLine);
+  // NEW: Tracks the profile owner's database status
+  const [profileIsOnline, setProfileIsOnline] = useState(false);
   const [uploading, setUploading] = useState({ avatar: false, cover: false });
 
-  // Initial state is empty to prevent flashing wrong data
+  // Initial state uses defaultAvatar to prevent empty src errors
   const [profile, setProfile] = useState({
     name: "",
     role: "",
@@ -189,7 +205,7 @@ export default function LiquidGlassUserHome() {
     website: "",
     githubUsername: "", // Added
     githubToken: "", // Added
-    avatar: "",
+    avatar: defaultAvatar, // FIX: Initialize with default immediately
     cover: "",
   });
 
@@ -203,21 +219,20 @@ export default function LiquidGlassUserHome() {
   const [dashboardStats, setDashboardStats] = useState({
     projectsCount: 0,
     appreciationCount: 0,
-    commitsCount: 0, // Placeholder for now
-    commentsCount: 0, // Placeholder/Partial
+    commitsCount: 0,
+    commentsCount: 0,
+    viewsCount: 0, // <--- ADDED THIS
   });
 
   // Fetch Projects to derive skills and stats
   useEffect(() => {
-    if (currentUser?.uid) {
+    if (targetUid) {
       const loadProjects = async () => {
-        console.log(
-          "🚀 [DEBUG] Starting Project Load for UID:",
-          currentUser.uid
-        );
+        console.log("🚀 [DEBUG] Starting Project Load for UID:", targetUid);
 
         try {
-          const data = await getUserProjects(currentUser.uid);
+          const data = await getUserProjects(targetUid); // Use targetUid
+          console.log(`📂 [DEBUG] Projects fetched: ${data.length}`, data);
           console.log(`📂 [DEBUG] Projects fetched: ${data.length}`, data);
 
           setProjects(data);
@@ -239,21 +254,15 @@ export default function LiquidGlassUserHome() {
 
           // --- CALCULATE COMMENTS (New Logic) ---
           let totalComments = 0;
-
-          // We must fetch the 'comments' subcollection for EACH project
-          console.log(
-            "💬 [DEBUG] Starting to count comments for all projects..."
-          );
+          console.log("💬 [DEBUG] Starting to count comments...");
 
           const commentCountsPromises = data.map(async (project) => {
             try {
-              // Construct path: users -> {uid} -> projects -> {projectId} -> comments
-              // NOTE: This assumes your data structure nests projects under users.
-              // If projects are a root collection, remove 'users', currentUser.uid, 'projects'.
+              // Use targetUid here too
               const commentsRef = collection(
                 db,
                 "users",
-                currentUser.uid,
+                targetUid,
                 "projects",
                 project.id,
                 "comments"
@@ -298,7 +307,7 @@ export default function LiquidGlassUserHome() {
       };
       loadProjects();
     }
-  }, [currentUser]);
+  }, [targetUid]); // Depend on targetUid
 
   // Fetch GitHub Stats
   useEffect(() => {
@@ -390,33 +399,36 @@ export default function LiquidGlassUserHome() {
 
   // -- Effects --
 
-  // 1. Fetch Data & Handle Online Status
+  // 1. Fetch Data & Handle Real-time Presence AND Views
   useEffect(() => {
-    console.log("🔄 [LiquidGlassUserHome] Auth Effect Triggered", {
-      uid: currentUser?.uid,
-    });
-
-    if (currentUser && currentUser.uid) {
-      // Start the retry-capable loader
+    if (targetUid) {
       loadUserDataWithRetry();
 
-      // Cleanup: Set Offline
-      return () => {
-        if (currentUser?.uid) {
-          updateUserStatus(currentUser.uid, false);
-        }
-      };
-    }
-  }, [currentUser]);
+      // NEW: Real-time listener for Profile Online Status & Views
+      const unsub = onSnapshot(doc(db, "users", targetUid), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
 
-  // 2. Listen to browser offline/online events
+          // 1. Update Online Status
+          setProfileIsOnline(data.isOnline === true);
+
+          // 2. Update Total Views Live
+          setDashboardStats((prev) => ({
+            ...prev,
+            viewsCount: data.totalViews || 0,
+          }));
+        }
+      });
+
+      return () => unsub();
+    }
+  }, [targetUid]);
+
+  // 2. Listen to browser offline/online events (Viewer's Connection)
   useEffect(() => {
     const handleStatusChange = () => {
       const status = navigator.onLine;
-      setIsOnline(status);
-      if (currentUser?.uid) {
-        updateUserStatus(currentUser.uid, status);
-      }
+      setViewerIsOnline(status);
     };
     window.addEventListener("online", handleStatusChange);
     window.addEventListener("offline", handleStatusChange);
@@ -424,60 +436,83 @@ export default function LiquidGlassUserHome() {
       window.removeEventListener("online", handleStatusChange);
       window.removeEventListener("offline", handleStatusChange);
     };
-  }, [currentUser]);
+  }, [targetUid]); // Depend on targetUid
 
   // WRAPPER: Handles the retry logic
   const loadUserDataWithRetry = async () => {
-    if (!currentUser?.uid) return;
+    if (!targetUid) return; // Use targetUid
 
     setLoading(true);
     let attempts = 0;
     const maxAttempts = 3;
     let success = false;
+    let lastFetchedData = null; // Store data to use as fallback
 
     while (attempts < maxAttempts && !success) {
       attempts++;
       console.log(
-        `📥 [Attempt ${attempts}/${maxAttempts}] Fetching Profile...`
+        `📥 [Attempt ${attempts}/${maxAttempts}] Fetching Profile for UID: ${targetUid}...`
       );
 
       try {
-        const data = await fetchUserProfile(currentUser.uid);
+        const data = await fetchUserProfile(targetUid); // Use targetUid
+        lastFetchedData = data; // Save for fallback
 
-        // CHECK: Is this a "Real" profile or a "Partial/Stub"?
-        // A real profile from your JSON has an 'email' field.
-        // A partial profile only has 'isOnline'.
-        if (data && data.email) {
-          console.log("✅ [Success] Full Profile Found:", data);
+        // DEBUG LOGGING
+        console.log(`🧐 [Attempt ${attempts}] Data received from DB:`, data);
+
+        // CHECK: Is this a "Valid" profile?
+        // FIX: We accept data if it has email OR displayName OR role OR photoURL.
+        // This prevents infinite retries for Twitter users who have no email.
+        const isValidProfile =
+          data &&
+          (data.email || data.displayName || data.role || data.photoURL);
+
+        if (isValidProfile) {
+          console.log("✅ [Success] Valid Profile Found:", data);
           applyProfileData(data);
           success = true;
         } else {
           console.warn(
-            "⚠️ [Partial Data Detected] Database returned incomplete data (Stub). Retrying in 800ms...",
+            "⚠️ [Partial Data Detected] Data missing key fields. Retrying in 800ms...",
             data
           );
-          // Wait 800ms before trying again
           await new Promise((resolve) => setTimeout(resolve, 800));
         }
       } catch (error) {
         console.error("🔥 Error fetching profile:", error);
-        break; // Stop retrying on fatal errors
+        break;
       }
     }
 
-    // If we ran out of attempts, just load whatever we have
+    // If we ran out of attempts, force load whatever data we found last
     if (!success) {
-      console.error(
-        "❌ [Failed] Max retries reached. Loading empty/stub data."
-      );
+      console.error("❌ [Failed] Max retries reached.");
+      if (lastFetchedData) {
+        console.log(
+          "⚠️ Applying last fetched data anyway (Fallback):",
+          lastFetchedData
+        );
+        applyProfileData(lastFetchedData);
+      } else {
+        console.log("⚠️ No data found at all. Keeping default state.");
+      }
     }
 
-    // Only AFTER we are done fetching, set online status
     updateUserStatus(currentUser.uid, true);
     setLoading(false);
   };
 
   const applyProfileData = (data) => {
+    console.group("🔍 [DEBUG] applyProfileData Execution");
+    console.log("📥 Raw Data from DB:", data);
+    console.log("👤 Current User Object:", currentUser);
+
+    const resolvedAvatar =
+      data?.photoURL || data?.avatar || currentUser?.photoURL || defaultAvatar;
+
+    console.log("🖼️ Resolved Avatar URL:", resolvedAvatar);
+
     const newProfileData = {
       name:
         data?.displayName || data?.name || currentUser?.displayName || "User",
@@ -573,9 +608,11 @@ export default function LiquidGlassUserHome() {
       <WelcomeHeader
         profile={profile}
         currentUser={currentUser}
-        isOnline={isOnline}
-        isEditMode={isEditMode}
+        isOnline={profileIsOnline}
+        isEditMode={effectiveEditMode}
         onSave={handleSaveProfile}
+        isOwner={isOwner} // Added prop
+        viewsCount={dashboardStats.viewsCount} // Added prop
       />
 
       {/* 2. Main Bento Grid */}
@@ -585,7 +622,8 @@ export default function LiquidGlassUserHome() {
           {/* A. Identity Card */}
           <IdentityCard
             profile={profile}
-            isEditMode={isEditMode}
+            isOnline={profileIsOnline} // Pass the real DB status
+            isEditMode={effectiveEditMode}
             onChange={handleProfileChange}
             onImageUpload={handleImageUpload}
             uploading={uploading}
@@ -599,9 +637,9 @@ export default function LiquidGlassUserHome() {
             <div className="md:col-span-2">
               <SkillsWidget
                 skills={derivedSkills}
-                isLoggedIn={!!currentUser} // Pass login status
+                isLoggedIn={isOwner} // Only show add buttons if Owner
                 onSeeMore={() => setShowSkillsModal(true)}
-                onAddProject={handleAddProjectRedirect} // Pass handler
+                onAddProject={handleAddProjectRedirect}
               />
             </div>
           </div>
@@ -623,7 +661,7 @@ export default function LiquidGlassUserHome() {
           <ActivityFeed />
 
           {/* E. Quick Actions */}
-          {isEditMode && <QuickActions />}
+          {effectiveEditMode && <QuickActions />}
         </div>
       </div>
     </div>
@@ -639,6 +677,8 @@ const WelcomeHeader = ({
   isOnline,
   isEditMode,
   onSave,
+  isOwner, // Added prop
+  viewsCount, // Added prop
 }) => {
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -647,10 +687,12 @@ const WelcomeHeader = ({
     return "Good Evening";
   };
 
-  // Safe split check
-  const displayName = profile.name
-    ? profile.name.split(" ")[0]
-    : currentUser?.displayName || "User";
+  // Logic for name: Owner gets name, Guest gets "Guest"
+  const displayName = isOwner
+    ? profile.name
+      ? profile.name.split(" ")[0]
+      : currentUser?.displayName || "User"
+    : "Guest";
 
   return (
     <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-white/5 pb-6">
@@ -675,11 +717,16 @@ const WelcomeHeader = ({
           </span>
           .
         </h1>
-        <p className="text-gray-400 mt-2 max-w-xl">
-          Here is what's happening with your portfolio today. You have{" "}
-          <span className="text-white font-semibold">12 new visitors</span> this
-          week.
-        </p>
+        {/* Only show stats text if owner */}
+        {isOwner && (
+          <p className="text-gray-400 mt-2 max-w-xl">
+            Here is what's happening with your portfolio today. You have{" "}
+            <span className="text-white font-semibold">
+              {viewsCount} visitor/s
+            </span>{" "}
+            recorded.
+          </p>
+        )}
       </div>
 
       {isEditMode && (
@@ -703,15 +750,35 @@ const WelcomeHeader = ({
 };
 
 // ============================================================================
-// SUB-COMPONENT: Identity Card
+// SUB-COMPONENT: IdentityCard
 // ============================================================================
 const IdentityCard = ({
   profile,
+  isOnline, // NEW PROP
   isEditMode,
   onChange,
   onImageUpload,
   uploading,
 }) => {
+  // --- DEBUG LOGIC START ---
+  const rawAvatar = profile.avatar;
+  const isTwitter = rawAvatar?.includes("twimg.com");
+
+  // Calculate the source we are about to use
+  let finalSrc = rawAvatar;
+  if (isTwitter) {
+    finalSrc = rawAvatar.replace("_normal", "_400x400");
+  } else if (!rawAvatar) {
+    finalSrc = defaultAvatar;
+  }
+
+  console.log(`🖼️ [DEBUG] IdentityCard Render:`, {
+    isInState: rawAvatar,
+    isTwitterDetected: isTwitter,
+    finalSrcCalculated: finalSrc,
+  });
+  // --- DEBUG LOGIC END ---
+
   return (
     <div className="relative group bg-[#0B1120] border border-white/5 rounded-2xl overflow-hidden shadow-2xl">
       {/* Cover Image */}
@@ -750,8 +817,21 @@ const IdentityCard = ({
         <div className="relative">
           <div className="w-32 h-32 rounded-2xl border-4 border-[#0B1120] overflow-hidden shadow-2xl bg-[#020617] group/avatar relative">
             <img
-              src={profile.avatar}
+              src={finalSrc}
               alt="Avatar"
+              // CRITICAL: Tells browser not to send Referer header (fixes Twitter 403)
+              referrerPolicy="no-referrer"
+              onLoad={() =>
+                console.log("✅ [DEBUG] Image LOADED successfully:", finalSrc)
+              }
+              onError={(e) => {
+                console.error(
+                  "❌ [DEBUG] Image ERROR triggered for:",
+                  finalSrc
+                );
+                e.target.onerror = null;
+                e.target.src = defaultAvatar;
+              }}
               className={`w-full h-full object-cover ${
                 uploading.avatar ? "opacity-50" : ""
               }`}
@@ -776,9 +856,16 @@ const IdentityCard = ({
             )}
           </div>
 
-          {/* Status Dot */}
+          {/* Status Dot - Dynamic Color based on isOnline prop */}
           <div className="absolute -bottom-2 -right-2 w-6 h-6 bg-[#0B1120] rounded-full flex items-center justify-center">
-            <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-[#0B1120] animate-pulse"></div>
+            <div
+              style={{ animationDuration: "3s" }} // FIXED: Slows down the pulse speed
+              className={`w-3 h-3 rounded-full transition-colors duration-500 animate-pulse ${
+                isOnline
+                  ? "bg-green-500 shadow-[0_0_10px_#22c55e]"
+                  : "bg-red-500 shadow-[0_0_5px_#ef4444]" // FIXED: Red now pulses too
+              }`}
+            />
           </div>
         </div>
 
@@ -905,7 +992,9 @@ const StatsWidget = ({ stats }) => {
               Total Views
             </div>
           </div>
-          <div className="text-2xl font-bold text-white">--</div>
+          <div className="text-2xl font-bold text-white">
+            {stats.viewsCount}
+          </div>
         </div>
 
         <div className="h-px w-full bg-white/5"></div>

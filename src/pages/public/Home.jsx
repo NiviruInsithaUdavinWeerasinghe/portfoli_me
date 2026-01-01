@@ -1,4 +1,16 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  updateDoc,
+  increment,
+  getDoc, // Added for unique check
+  setDoc, // Added for recording unique view
+} from "firebase/firestore"; // Added for fetching profiles & Presence
+import { db } from "../../lib/firebase"; // Added DB instance
 import {
   ArrowRight,
   Code,
@@ -15,6 +27,7 @@ import {
   LogOut,
   Settings,
   ChevronDown,
+  Search, // Added for Portfolio Search
   Mail, // Added for Google/Email
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -26,6 +39,34 @@ function Home() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false); // Dropdown state
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // --- NEW STATE FOR CONTENT SWITCH ---
+  const [activeView, setActiveView] = useState("home"); // "home" or "portfolios"
+  const [publicProfiles, setPublicProfiles] = useState([]);
+  const [loadingProfiles, setLoadingProfiles] = useState(false);
+  const [searchQuery, setSearchQuery] = useState(""); // Added state for search
+
+  const handleShowPortfolios = async () => {
+    setActiveView("portfolios");
+    // Only fetch if we haven't already
+    if (publicProfiles.length === 0) {
+      setLoadingProfiles(true);
+      try {
+        const q = query(collection(db, "users"), where("isPublic", "==", true));
+        const querySnapshot = await getDocs(q);
+        const profiles = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setPublicProfiles(profiles);
+      } catch (error) {
+        console.error("Error fetching profiles:", error);
+      } finally {
+        setLoadingProfiles(false);
+      }
+    }
+  };
+
   // New state to dynamically change the shutter text (LOGIN vs START)
   const [transitionLetters, setTransitionLetters] = useState([
     "L",
@@ -34,6 +75,31 @@ function Home() {
     "I",
     "N",
   ]);
+
+  // --- NEW: PRESENCE MANAGEMENT SYSTEM ---
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+
+    const userRef = doc(db, "users", currentUser.uid);
+
+    // 1. Set Online on mount
+    updateDoc(userRef, { isOnline: true }).catch((err) =>
+      console.error("Error setting online:", err)
+    );
+
+    // 2. Set Offline on Window Close/Tab Close
+    const handleTabClose = () => {
+      updateDoc(userRef, { isOnline: false });
+    };
+
+    window.addEventListener("beforeunload", handleTabClose);
+
+    // 3. Set Offline on Unmount
+    return () => {
+      window.removeEventListener("beforeunload", handleTabClose);
+      updateDoc(userRef, { isOnline: false });
+    };
+  }, [currentUser]);
 
   React.useEffect(() => {
     setIsLoaded(true);
@@ -137,15 +203,29 @@ function Home() {
                 Portfoli<span className="text-amber-500">Me</span>
               </span>
             </div>
-            <div className="hidden md:flex space-x-8 text-sm font-medium text-gray-400">
-              <button className="hover:text-white transition-colors">
-                Features
+            <div className="hidden md:flex items-center gap-2 text-sm font-medium text-gray-400">
+              <button
+                onClick={() => setActiveView("home")}
+                className={`px-5 py-2 rounded-full transition-all ${
+                  activeView === "home"
+                    ? "bg-white/10 text-white"
+                    : "hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                Home
               </button>
-              <button className="hover:text-white transition-colors">
+              <button
+                onClick={handleShowPortfolios}
+                className={`px-5 py-2 rounded-full transition-all ${
+                  activeView === "portfolios"
+                    ? "bg-white/10 text-white"
+                    : "hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                Portfolios
+              </button>
+              <button className="px-5 py-2 rounded-full hover:bg-white/10 hover:text-white transition-all">
                 Templates
-              </button>
-              <button className="hover:text-white transition-colors">
-                Pricing
               </button>
             </div>
             <div className="flex items-center gap-4 text-sm font-medium relative">
@@ -306,276 +386,457 @@ function Home() {
           </nav>
         </div>
 
-        {/* --- HERO SECTION --- */}
-        <main className="relative pt-32 pb-10 px-4 flex flex-col items-center text-center max-w-7xl mx-auto z-10">
-          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-gray-300 text-xs font-medium px-4 py-1.5 rounded-full mb-8 hover:bg-white/10 transition-colors cursor-default">
-            <Sparkles size={12} className="text-orange-400" />
-            <span>v1.0 • Now in Public Beta</span>
-          </div>
-
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-8 max-w-5xl leading-[1.1] text-white">
-            Build a Professional Portfolio <br className="hidden md:block" />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-orange-500 to-red-500">
-              Without Writing Code.
-            </span>
-          </h1>
-
-          <p className="text-gray-400 text-lg md:text-xl max-w-2xl mb-10 leading-relaxed">
-            Manage your projects, showcase your skills, and get a unique link to
-            share with recruiters. Focus on your work, we'll handle the website.
-          </p>
-
-          {/* ONLY SHOW BUTTONS IF LOGGED IN */}
-          {currentUser && (
-            <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto mb-12">
-              <button
-                onClick={() => navigate("/demo_user/home")} // Updated to match Login redirect
-                className="bg-white text-black px-8 py-3.5 rounded-xl font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 shadow-xl shadow-white/5"
-              >
-                Create Your Portfolio <ArrowRight size={18} />
-              </button>
-              <button
-                onClick={() => {}} /* Linkless for now */
-                className="px-8 py-3.5 rounded-xl font-bold text-gray-300 border border-white/10 hover:bg-white/5 hover:text-white transition-colors cursor-default"
-              >
-                View Live Demo
-              </button>
-            </div>
-          )}
-        </main>
-
-        {/* --- SECTION 1: SKILLS --- */}
-        <section className="py-16 relative z-10">
-          <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
-            <div className="order-1">
-              <div className="w-12 h-12 bg-orange-500/10 rounded-xl flex items-center justify-center mb-6 border border-orange-500/20">
-                <Code className="text-orange-500" size={24} />
+        {activeView === "home" ? (
+          /* --- ORIGINAL HOME CONTENT --- */
+          <>
+            {/* --- HERO SECTION --- */}
+            <main className="relative pt-32 pb-10 px-4 flex flex-col items-center text-center max-w-7xl mx-auto z-10">
+              <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-gray-300 text-xs font-medium px-4 py-1.5 rounded-full mb-8 hover:bg-white/10 transition-colors cursor-default">
+                <Sparkles size={12} className="text-orange-400" />
+                <span>v1.0 • Now in Public Beta</span>
               </div>
-              <h2 className="text-3xl md:text-4xl font-bold mb-6 leading-tight">
-                Showcase Your <span className="text-orange-500">Skills</span> &
-                Proficiency
-              </h2>
-              <p className="text-gray-400 text-lg mb-8 leading-relaxed">
-                Don't just list keywords. Categorize your technical stack, set
-                proficiency levels, and let recruiters see exactly what you
-                bring to the table.
-              </p>
-              <ul className="space-y-4 text-gray-300">
-                <li className="flex items-center gap-3">
-                  <CheckCircle size={20} className="text-green-500" />
-                  <span>One-click skill addition</span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <CheckCircle size={20} className="text-green-500" />
-                  <span>Auto-generated proficiency bars</span>
-                </li>
-              </ul>
-            </div>
 
-            <div className="order-2 relative group perspective-1000">
-              <div className="absolute -inset-1 bg-gradient-to-r from-orange-600/20 to-purple-600/20 rounded-2xl blur-xl opacity-30 group-hover:opacity-50 transition duration-1000"></div>
-              <MockupFrame url="portfoli.me/edit/skills">
-                <div className="p-8 bg-[#0B1120] min-h-[350px]">
-                  <h3 className="text-white font-bold text-lg mb-6 flex justify-between items-center">
-                    My Tech Stack
-                    <button className="text-xs bg-orange-600 px-3 py-1 rounded-md text-white hover:bg-orange-500">
-                      + Add New
-                    </button>
-                  </h3>
-                  <div className="space-y-6">
-                    {/* Category 1 */}
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase font-bold mb-3">
-                        Frontend Development
-                      </p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <SkillBadge
-                          name="React.js"
-                          level="90%"
-                          color="bg-blue-500"
-                        />
-                        <SkillBadge
-                          name="Tailwind CSS"
-                          level="95%"
-                          color="bg-cyan-400"
-                        />
-                        <SkillBadge
-                          name="Next.js"
-                          level="80%"
-                          color="bg-white"
-                        />
-                        <SkillBadge
-                          name="TypeScript"
-                          level="75%"
-                          color="bg-blue-600"
-                        />
+              <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-8 max-w-5xl leading-[1.1] text-white">
+                Build a Professional Portfolio{" "}
+                <br className="hidden md:block" />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-orange-500 to-red-500">
+                  Without Writing Code.
+                </span>
+              </h1>
+
+              <p className="text-gray-400 text-lg md:text-xl max-w-2xl mb-10 leading-relaxed">
+                Manage your projects, showcase your skills, and get a unique
+                link to share with recruiters. Focus on your work, we'll handle
+                the website.
+              </p>
+
+              {/* ONLY SHOW BUTTONS IF LOGGED IN */}
+              {currentUser && (
+                <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto mb-12">
+                  <button
+                    // FIX: Use the actual current user's UID instead of hardcoded "demo_user"
+                    onClick={() => navigate(`/${currentUser.uid}/home`)}
+                    className="bg-white text-black px-8 py-3.5 rounded-xl font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 shadow-xl shadow-white/5"
+                  >
+                    Create Your Portfolio <ArrowRight size={18} />
+                  </button>
+                  <button
+                    onClick={() => {}} /* Linkless for now */
+                    className="px-8 py-3.5 rounded-xl font-bold text-gray-300 border border-white/10 hover:bg-white/5 hover:text-white transition-colors cursor-default"
+                  >
+                    View Live Demo
+                  </button>
+                </div>
+              )}
+            </main>
+
+            {/* --- SECTION 1: SKILLS --- */}
+            <section className="py-16 relative z-10">
+              <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
+                <div className="order-1">
+                  <div className="w-12 h-12 bg-orange-500/10 rounded-xl flex items-center justify-center mb-6 border border-orange-500/20">
+                    <Code className="text-orange-500" size={24} />
+                  </div>
+                  <h2 className="text-3xl md:text-4xl font-bold mb-6 leading-tight">
+                    Showcase Your{" "}
+                    <span className="text-orange-500">Skills</span> &
+                    Proficiency
+                  </h2>
+                  <p className="text-gray-400 text-lg mb-8 leading-relaxed">
+                    Don't just list keywords. Categorize your technical stack,
+                    set proficiency levels, and let recruiters see exactly what
+                    you bring to the table.
+                  </p>
+                  <ul className="space-y-4 text-gray-300">
+                    <li className="flex items-center gap-3">
+                      <CheckCircle size={20} className="text-green-500" />
+                      <span>One-click skill addition</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <CheckCircle size={20} className="text-green-500" />
+                      <span>Auto-generated proficiency bars</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="order-2 relative group perspective-1000">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-orange-600/20 to-purple-600/20 rounded-2xl blur-xl opacity-30 group-hover:opacity-50 transition duration-1000"></div>
+                  <MockupFrame url="portfoli.me/edit/skills">
+                    <div className="p-8 bg-[#0B1120] min-h-[350px]">
+                      <h3 className="text-white font-bold text-lg mb-6 flex justify-between items-center">
+                        My Tech Stack
+                        <button className="text-xs bg-orange-600 px-3 py-1 rounded-md text-white hover:bg-orange-500">
+                          + Add New
+                        </button>
+                      </h3>
+                      <div className="space-y-6">
+                        {/* Category 1 */}
+                        <div>
+                          <p className="text-xs text-gray-500 uppercase font-bold mb-3">
+                            Frontend Development
+                          </p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <SkillBadge
+                              name="React.js"
+                              level="90%"
+                              color="bg-blue-500"
+                            />
+                            <SkillBadge
+                              name="Tailwind CSS"
+                              level="95%"
+                              color="bg-cyan-400"
+                            />
+                            <SkillBadge
+                              name="Next.js"
+                              level="80%"
+                              color="bg-white"
+                            />
+                            <SkillBadge
+                              name="TypeScript"
+                              level="75%"
+                              color="bg-blue-600"
+                            />
+                          </div>
+                        </div>
+                        {/* Category 2 */}
+                        <div>
+                          <p className="text-xs text-gray-500 uppercase font-bold mb-3 mt-2">
+                            Backend & Database
+                          </p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <SkillBadge
+                              name="Node.js"
+                              level="85%"
+                              color="bg-green-500"
+                            />
+                            <SkillBadge
+                              name="Firebase"
+                              level="70%"
+                              color="bg-yellow-500"
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    {/* Category 2 */}
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase font-bold mb-3 mt-2">
-                        Backend & Database
-                      </p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <SkillBadge
-                          name="Node.js"
-                          level="85%"
+                  </MockupFrame>
+                </div>
+              </div>
+            </section>
+
+            {/* --- SECTION 2: EXPERIENCE (AUTO SCROLLING) --- */}
+            <section className="py-16 relative z-10">
+              <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
+                {/* Left: Mockup Window with Infinite Scroll */}
+                <div className="order-2 lg:order-1 relative group perspective-1000">
+                  <div className="absolute -inset-1 bg-gradient-to-l from-green-600/20 to-emerald-600/20 rounded-2xl blur-xl opacity-30 group-hover:opacity-50 transition duration-1000"></div>
+                  <MockupFrame url="portfoli.me/edit/experience">
+                    <div className="p-6 sm:p-8 bg-[#0B1120] h-[350px] relative overflow-hidden group">
+                      {/* Gradient Masks for Smooth Scrolling */}
+                      <div className="absolute top-0 left-0 right-0 h-10 bg-gradient-to-b from-[#0B1120] to-transparent z-20 pointer-events-none"></div>
+                      <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#0B1120] to-transparent z-20 pointer-events-none"></div>
+
+                      {/* Timeline Line (Static background) */}
+                      <div className="absolute left-8 sm:left-10 top-0 bottom-0 w-0.5 bg-white/10 z-0"></div>
+
+                      {/* Auto Scrolling Content */}
+                      <AutoScroll>
+                        {/* Experience Item 1 */}
+                        <ExperienceItem
+                          role="Senior Frontend Dev"
+                          company="TechCorp Inc."
+                          date="2023 - Present"
+                          desc="Led the migration to React 18 and improved site performance by 40%."
                           color="bg-green-500"
                         />
-                        <SkillBadge
-                          name="Firebase"
-                          level="70%"
-                          color="bg-yellow-500"
+                        {/* Experience Item 2 */}
+                        <ExperienceItem
+                          role="Web Developer Intern"
+                          company="StartUp Studio"
+                          date="2021 - 2023"
+                          desc="Collaborated with designers to implement new UI features and animations."
+                          color="bg-blue-500"
                         />
-                      </div>
+                        {/* Experience Item 3 (Added for length) */}
+                        <ExperienceItem
+                          role="Junior Designer"
+                          company="Creative Flow"
+                          date="2020 - 2021"
+                          desc="Designed mockups and prototypes for mobile applications using Figma."
+                          color="bg-purple-500"
+                        />
+                        {/* Experience Item 4 (Added for length) */}
+                        <ExperienceItem
+                          role="Freelance Dev"
+                          company="Self Employed"
+                          date="2019 - 2020"
+                          desc="Built custom WordPress themes and React landing pages for local clients."
+                          color="bg-orange-500"
+                        />
+                      </AutoScroll>
                     </div>
+                  </MockupFrame>
+                </div>
+
+                <div className="order-1 lg:order-2">
+                  <div className="w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center mb-6 border border-green-500/20">
+                    <Briefcase className="text-green-500" size={24} />
+                  </div>
+                  <h2 className="text-3xl md:text-4xl font-bold mb-6 leading-tight">
+                    Track Your <span className="text-green-500">Journey</span>
+                  </h2>
+                  <p className="text-gray-400 text-lg mb-8 leading-relaxed">
+                    Your career isn't just a list of dates. Create a visual
+                    timeline of your work history, internships, and education.
+                  </p>
+                  <ul className="space-y-4 text-gray-300">
+                    <li className="flex items-center gap-3">
+                      <CheckCircle size={20} className="text-orange-500" />
+                      <span>Beautiful timeline layout</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <CheckCircle size={20} className="text-orange-500" />
+                      <span>Add company logos & descriptions</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </section>
+
+            {/* --- SECTION 3: PROJECTS (AUTO SCROLLING) --- */}
+            <section className="py-16 relative z-10">
+              <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
+                <div className="order-1">
+                  <div className="w-12 h-12 bg-blue-500/10 rounded-xl flex items-center justify-center mb-6 border border-blue-500/20">
+                    <Layers className="text-blue-500" size={24} />
+                  </div>
+                  <h2 className="text-3xl md:text-4xl font-bold mb-6 leading-tight">
+                    Let Your Work <span className="text-blue-500">Speak</span>{" "}
+                    For Itself
+                  </h2>
+                  <p className="text-gray-400 text-lg mb-8 leading-relaxed">
+                    Upload images, embed videos, or link to GitHub repositories.
+                    Our project editor is designed to handle detailed case
+                    studies or quick visual showcases.
+                  </p>
+                  <button className="text-blue-400 hover:text-white font-medium flex items-center gap-2 transition-colors">
+                    Explore Templates <ArrowRight size={16} />
+                  </button>
+                </div>
+
+                <div className="order-2 relative group perspective-1000">
+                  <div className="absolute -inset-1 bg-gradient-to-l from-blue-600/20 to-cyan-600/20 rounded-2xl blur-xl opacity-30 group-hover:opacity-50 transition duration-1000"></div>
+                  <MockupFrame url="portfoli.me/projects">
+                    <ProjectsMockupContent />
+                  </MockupFrame>
+                </div>
+              </div>
+            </section>
+
+            {/* --- FEATURES GRID --- */}
+            <section className="py-24 px-4 relative z-10">
+              <div className="max-w-6xl mx-auto">
+                <div className="text-center mb-16">
+                  <h2 className="text-3xl font-bold mb-4 text-white">
+                    Everything else you need
+                  </h2>
+                  <p className="text-gray-400">
+                    We've thought of the little things so you don't have to.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <FeatureCard
+                    icon={<Monitor size={32} className="text-orange-500" />}
+                    title="Responsive Design"
+                    desc="Your portfolio looks perfect on phones, tablets, and desktops automatically."
+                  />
+                  <FeatureCard
+                    icon={<Sparkles size={32} className="text-orange-500" />}
+                    title="Dark & Light Mode"
+                    desc="Switch themes with one click. Your content adapts automatically."
+                  />
+                  <FeatureCard
+                    icon={<Share2 size={32} className="text-orange-500" />}
+                    title="SEO Optimized"
+                    desc="We structure your data so Google can find your portfolio easily."
+                  />
+                </div>
+              </div>
+            </section>
+          </>
+        ) : (
+          /* --- NEW: PORTFOLIO LIST SECTION (BEAUTIFUL DESIGN) --- */
+          <section className="pt-32 pb-20 px-4 min-h-screen max-w-7xl mx-auto relative z-10">
+            {/* Enhanced Header Section */}
+            <div className="text-center mb-16 relative">
+              {/* Decorative Glow */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-orange-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+
+              <div className="relative z-10">
+                <span className="inline-block py-1 px-3 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold tracking-wider uppercase mb-4">
+                  Community Showcase
+                </span>
+                <h2 className="text-4xl md:text-5xl font-bold mb-6 text-white tracking-tight">
+                  Discover{" "}
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-600">
+                    Exceptional
+                  </span>{" "}
+                  Portfolios
+                </h2>
+                <p className="text-gray-400 max-w-2xl mx-auto text-lg mb-8 leading-relaxed">
+                  Explore professional profiles created by developers,
+                  designers, and students. Find inspiration for your next
+                  project.
+                </p>
+
+                {/* Search Bar (Functional) */}
+                <div className="max-w-md mx-auto relative group z-20">
+                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-amber-600 rounded-full opacity-20 blur-md group-hover:opacity-30 transition-opacity"></div>
+                  <div className="relative bg-[#0B1120] border border-white/10 rounded-full flex items-center p-1.5 focus-within:border-orange-500/50 transition-colors">
+                    <Search className="text-gray-500 ml-3" size={20} />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search by name or role..."
+                      className="bg-transparent border-none text-white text-sm w-full px-3 py-2 focus:outline-none placeholder:text-gray-600"
+                    />
+                    <button className="bg-white/5 hover:bg-white/10 text-white px-4 py-1.5 rounded-full text-xs font-bold transition-colors border border-white/5">
+                      Search
+                    </button>
                   </div>
                 </div>
-              </MockupFrame>
-            </div>
-          </div>
-        </section>
 
-        {/* --- SECTION 2: EXPERIENCE (AUTO SCROLLING) --- */}
-        <section className="py-16 relative z-10">
-          <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
-            {/* Left: Mockup Window with Infinite Scroll */}
-            <div className="order-2 lg:order-1 relative group perspective-1000">
-              <div className="absolute -inset-1 bg-gradient-to-l from-green-600/20 to-emerald-600/20 rounded-2xl blur-xl opacity-30 group-hover:opacity-50 transition duration-1000"></div>
-              <MockupFrame url="portfoli.me/edit/experience">
-                <div className="p-6 sm:p-8 bg-[#0B1120] h-[350px] relative overflow-hidden group">
-                  {/* Gradient Masks for Smooth Scrolling */}
-                  <div className="absolute top-0 left-0 right-0 h-10 bg-gradient-to-b from-[#0B1120] to-transparent z-20 pointer-events-none"></div>
-                  <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#0B1120] to-transparent z-20 pointer-events-none"></div>
-
-                  {/* Timeline Line (Static background) */}
-                  <div className="absolute left-8 sm:left-10 top-0 bottom-0 w-0.5 bg-white/10 z-0"></div>
-
-                  {/* Auto Scrolling Content */}
-                  <AutoScroll>
-                    {/* Experience Item 1 */}
-                    <ExperienceItem
-                      role="Senior Frontend Dev"
-                      company="TechCorp Inc."
-                      date="2023 - Present"
-                      desc="Led the migration to React 18 and improved site performance by 40%."
-                      color="bg-green-500"
-                    />
-                    {/* Experience Item 2 */}
-                    <ExperienceItem
-                      role="Web Developer Intern"
-                      company="StartUp Studio"
-                      date="2021 - 2023"
-                      desc="Collaborated with designers to implement new UI features and animations."
-                      color="bg-blue-500"
-                    />
-                    {/* Experience Item 3 (Added for length) */}
-                    <ExperienceItem
-                      role="Junior Designer"
-                      company="Creative Flow"
-                      date="2020 - 2021"
-                      desc="Designed mockups and prototypes for mobile applications using Figma."
-                      color="bg-purple-500"
-                    />
-                    {/* Experience Item 4 (Added for length) */}
-                    <ExperienceItem
-                      role="Freelance Dev"
-                      company="Self Employed"
-                      date="2019 - 2020"
-                      desc="Built custom WordPress themes and React landing pages for local clients."
-                      color="bg-orange-500"
-                    />
-                  </AutoScroll>
+                {/* Quick Filters */}
+                <div className="flex flex-wrap justify-center gap-2 mt-6 relative z-20">
+                  {[
+                    "All",
+                    "Developers",
+                    "Designers",
+                    "Students",
+                    "Freelancers",
+                  ].map((tag) => (
+                    <button
+                      key={tag}
+                      className="px-3 py-1 rounded-full border border-white/5 bg-white/5 text-xs text-gray-400 hover:text-white hover:border-white/20 transition-all"
+                    >
+                      {tag}
+                    </button>
+                  ))}
                 </div>
-              </MockupFrame>
-            </div>
-
-            <div className="order-1 lg:order-2">
-              <div className="w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center mb-6 border border-green-500/20">
-                <Briefcase className="text-green-500" size={24} />
               </div>
-              <h2 className="text-3xl md:text-4xl font-bold mb-6 leading-tight">
-                Track Your <span className="text-green-500">Journey</span>
-              </h2>
-              <p className="text-gray-400 text-lg mb-8 leading-relaxed">
-                Your career isn't just a list of dates. Create a visual timeline
-                of your work history, internships, and education.
-              </p>
-              <ul className="space-y-4 text-gray-300">
-                <li className="flex items-center gap-3">
-                  <CheckCircle size={20} className="text-orange-500" />
-                  <span>Beautiful timeline layout</span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <CheckCircle size={20} className="text-orange-500" />
-                  <span>Add company logos & descriptions</span>
-                </li>
-              </ul>
             </div>
-          </div>
-        </section>
 
-        {/* --- SECTION 3: PROJECTS (AUTO SCROLLING) --- */}
-        <section className="py-16 relative z-10">
-          <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
-            <div className="order-1">
-              <div className="w-12 h-12 bg-blue-500/10 rounded-xl flex items-center justify-center mb-6 border border-blue-500/20">
-                <Layers className="text-blue-500" size={24} />
+            {loadingProfiles ? (
+              <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
               </div>
-              <h2 className="text-3xl md:text-4xl font-bold mb-6 leading-tight">
-                Let Your Work <span className="text-blue-500">Speak</span> For
-                Itself
-              </h2>
-              <p className="text-gray-400 text-lg mb-8 leading-relaxed">
-                Upload images, embed videos, or link to GitHub repositories. Our
-                project editor is designed to handle detailed case studies or
-                quick visual showcases.
-              </p>
-              <button className="text-blue-400 hover:text-white font-medium flex items-center gap-2 transition-colors">
-                Explore Templates <ArrowRight size={16} />
-              </button>
-            </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {publicProfiles.filter((p) => {
+                  const q = searchQuery.toLowerCase();
+                  return (
+                    p.displayName?.toLowerCase().includes(q) ||
+                    p.role?.toLowerCase().includes(q) ||
+                    p.bio?.toLowerCase().includes(q)
+                  );
+                }).length > 0 ? (
+                  publicProfiles
+                    .filter((p) => {
+                      const q = searchQuery.toLowerCase();
+                      return (
+                        p.displayName?.toLowerCase().includes(q) ||
+                        p.role?.toLowerCase().includes(q) ||
+                        p.bio?.toLowerCase().includes(q)
+                      );
+                    })
+                    .map((profile) => (
+                      <div
+                        key={profile.id}
+                        className="bg-[#0B1120] border border-white/10 rounded-2xl p-6 hover:border-orange-500/50 transition-all group flex flex-col items-center text-center"
+                      >
+                        <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-orange-500 to-amber-600 mb-4 shadow-lg">
+                          <img
+                            src={
+                              profile.photoURL ||
+                              "https://via.placeholder.com/150"
+                            }
+                            alt={profile.displayName}
+                            className="w-full h-full rounded-full object-cover bg-[#020617]"
+                          />
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-1">
+                          {profile.displayName ||
+                            profile.name ||
+                            "Anonymous User"}
+                        </h3>
+                        <p className="text-sm text-orange-400 font-medium mb-4">
+                          {profile.role || "Creator"}
+                        </p>
+                        <p className="text-gray-400 text-sm mb-6 line-clamp-2 h-10">
+                          {profile.bio ||
+                            "This user hasn't added a bio yet, but their work speaks for itself."}
+                        </p>
+                        <button
+                          onClick={async () => {
+                            // 1. Unique View Logic
+                            if (
+                              currentUser?.uid &&
+                              currentUser.uid !== profile.id
+                            ) {
+                              try {
+                                // Check if this user has already viewed this profile
+                                // We use a subcollection 'uniqueViews' to track IDs to prevent duplicates
+                                const viewRef = doc(
+                                  db,
+                                  "users",
+                                  profile.id,
+                                  "uniqueViews",
+                                  currentUser.uid
+                                );
+                                const viewSnap = await getDoc(viewRef);
 
-            <div className="order-2 relative group perspective-1000">
-              <div className="absolute -inset-1 bg-gradient-to-l from-blue-600/20 to-cyan-600/20 rounded-2xl blur-xl opacity-30 group-hover:opacity-50 transition duration-1000"></div>
-              <MockupFrame url="portfoli.me/projects">
-                <ProjectsMockupContent />
-              </MockupFrame>
-            </div>
-          </div>
-        </section>
+                                // Only increment if the view record does NOT exist
+                                if (!viewSnap.exists()) {
+                                  // A. Mark this user as having viewed
+                                  await setDoc(viewRef, {
+                                    timestamp: new Date(),
+                                    viewerId: currentUser.uid,
+                                  });
 
-        {/* --- FEATURES GRID --- */}
-        <section className="py-24 px-4 relative z-10">
-          <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl font-bold mb-4 text-white">
-                Everything else you need
-              </h2>
-              <p className="text-gray-400">
-                We've thought of the little things so you don't have to.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <FeatureCard
-                icon={<Monitor size={32} className="text-orange-500" />}
-                title="Responsive Design"
-                desc="Your portfolio looks perfect on phones, tablets, and desktops automatically."
-              />
-              <FeatureCard
-                icon={<Sparkles size={32} className="text-orange-500" />}
-                title="Dark & Light Mode"
-                desc="Switch themes with one click. Your content adapts automatically."
-              />
-              <FeatureCard
-                icon={<Share2 size={32} className="text-orange-500" />}
-                title="SEO Optimized"
-                desc="We structure your data so Google can find your portfolio easily."
-              />
-            </div>
-          </div>
-        </section>
+                                  // B. Increment the public counter
+                                  const userRef = doc(db, "users", profile.id);
+                                  await updateDoc(userRef, {
+                                    totalViews: increment(1),
+                                  });
+                                }
+                              } catch (err) {
+                                console.error(
+                                  "Error updating unique views:",
+                                  err
+                                );
+                              }
+                            }
+                            // 2. Open Portfolio
+                            window.open(`/${profile.uid}/home`, "_blank");
+                          }}
+                          className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-orange-600 hover:border-orange-600 text-white font-medium transition-all flex items-center justify-center gap-2 group-hover:shadow-[0_0_15px_rgba(234,88,12,0.3)]"
+                        >
+                          Open Portfolio <ArrowRight size={16} />
+                        </button>
+                      </div>
+                    ))
+                ) : (
+                  <div className="col-span-full text-center text-gray-500 py-10">
+                    {searchQuery
+                      ? "No profiles match your search."
+                      : "No public profiles found yet."}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
       </div>
       {/* --- END OF CONTENT WRAPPER --- */}
 
@@ -600,18 +861,24 @@ function Home() {
           <div>
             <h4 className="font-bold text-white mb-4">Product</h4>
             <ul className="space-y-2 text-gray-500">
+              <li
+                onClick={() => navigate("/")}
+                className="hover:text-orange-500 cursor-pointer"
+              >
+                Home
+              </li>
+              <li className="hover:text-orange-500 cursor-pointer">
+                Portfolios
+              </li>
               <li className="hover:text-orange-500 cursor-pointer">
                 Templates
               </li>
-              <li className="hover:text-orange-500 cursor-pointer">Features</li>
-              <li className="hover:text-orange-500 cursor-pointer">Pricing</li>
             </ul>
           </div>
           <div>
             <h4 className="font-bold text-white mb-4">Company</h4>
             <ul className="space-y-2 text-gray-500">
               <li className="hover:text-orange-500 cursor-pointer">About Us</li>
-              <li className="hover:text-orange-500 cursor-pointer">Careers</li>
               <li className="hover:text-orange-500 cursor-pointer">Contact</li>
             </ul>
           </div>

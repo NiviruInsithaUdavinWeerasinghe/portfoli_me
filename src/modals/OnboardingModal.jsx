@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import axios from "axios"; // Added for API validation
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import {
@@ -11,16 +12,21 @@ import {
   Github,
   Key,
   ExternalLink,
+  Globe,
+  Lock,
+  AlertCircle, // Added
 } from "lucide-react";
 
 export default function OnboardingModal({ user, onComplete }) {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(""); // New Error State
   const [formData, setFormData] = useState({
     displayName: "",
     role: "",
     bio: "",
-    githubToken: "", // New Field for Token
-    githubUsername: "", // Useful to store their username explicitly
+    githubToken: "",
+    githubUsername: "",
+    isPublic: true,
   });
 
   // Pre-fill data
@@ -36,8 +42,41 @@ export default function OnboardingModal({ user, onComplete }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(""); // Clear previous errors
     setIsLoading(true);
 
+    let authenticatedUsername = "";
+
+    // 1. Validate GitHub Token AND Get the Username associated with it
+    try {
+      const response = await axios.get("https://api.github.com/user", {
+        headers: { Authorization: `token ${formData.githubToken}` },
+      });
+      // The token is valid, and we get the actual username of the token owner
+      authenticatedUsername = response.data.login;
+    } catch (error) {
+      console.error("GitHub Token Validation Failed:", error);
+      setError(
+        "The GitHub Token provided is invalid. Please check and try again."
+      );
+      setIsLoading(false);
+      return;
+    }
+
+    // 2. Compare Token Owner vs. Entered Username
+    const targetUsername = formData.githubUsername.trim() || user.displayName;
+
+    // Check if the typed username matches the Token's owner (Case insensitive)
+    if (authenticatedUsername.toLowerCase() !== targetUsername.toLowerCase()) {
+      // FIX: Generic error message that doesn't reveal the token owner
+      setError(
+        `The GitHub Token provided does not match the username "${targetUsername}". Please ensure the token belongs to the account you are trying to link.`
+      );
+      setIsLoading(false);
+      return;
+    }
+
+    // 3. Save Data (We use 'authenticatedUsername' to be 100% sure it's correct)
     try {
       await setDoc(
         doc(db, "users", user.uid),
@@ -47,9 +86,10 @@ export default function OnboardingModal({ user, onComplete }) {
           displayName: formData.displayName,
           role: formData.role,
           bio: formData.bio,
+          isPublic: formData.isPublic,
           photoURL: user.photoURL,
-          githubToken: formData.githubToken, // Saving the token
-          githubUsername: formData.githubUsername || user.displayName, // Fallback
+          githubToken: formData.githubToken,
+          githubUsername: authenticatedUsername, // Save the REAL username from the token
           lastLogin: serverTimestamp(),
           updatedAt: serverTimestamp(),
           setupComplete: true,
@@ -60,7 +100,7 @@ export default function OnboardingModal({ user, onComplete }) {
       onComplete();
     } catch (error) {
       console.error("Error saving user data:", error);
-      alert("Failed to save profile. Please try again.");
+      setError("Failed to save profile. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -71,9 +111,15 @@ export default function OnboardingModal({ user, onComplete }) {
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+      {/* Hide Scrollbar CSS */}
+      <style>{`
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
+
       <div className="absolute inset-0 bg-[#020617]/90 backdrop-blur-sm transition-opacity duration-300"></div>
 
-      <div className="relative w-full max-w-lg bg-[#0B1120] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-content-slide max-h-[90vh] overflow-y-auto">
+      <div className="relative w-full max-w-lg bg-[#0B1120] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-content-slide max-h-[90vh] overflow-y-auto scrollbar-hide">
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-600 to-amber-500"></div>
 
         <div className="p-8">
@@ -100,6 +146,16 @@ export default function OnboardingModal({ user, onComplete }) {
               </p>
             </div>
           </div>
+
+          {/* Error Message Display */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+              <div className="min-w-[24px] h-6 flex items-center justify-center rounded-full bg-red-500/20 text-red-500">
+                <AlertCircle size={16} />
+              </div>
+              <p className="text-sm text-red-400 font-medium">{error}</p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Display Name */}
@@ -222,6 +278,47 @@ export default function OnboardingModal({ user, onComplete }) {
                   className="w-full bg-transparent border-none rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:outline-none focus:ring-0 resize-none"
                 />
               </div>
+            </div>
+
+            {/* Visibility Toggle */}
+            <div className="flex items-center justify-between bg-[#020617] p-3 rounded-xl border border-white/10">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`p-2 rounded-lg ${
+                    formData.isPublic
+                      ? "bg-green-500/20 text-green-500"
+                      : "bg-red-500/20 text-red-500"
+                  }`}
+                >
+                  {formData.isPublic ? <Globe size={20} /> : <Lock size={20} />}
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-white">
+                    {formData.isPublic ? "Public Profile" : "Private Profile"}
+                  </span>
+                  <span className="text-[10px] text-gray-500">
+                    {formData.isPublic
+                      ? "Visible to everyone"
+                      : "Only visible to you"}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setFormData({ ...formData, isPublic: !formData.isPublic })
+                }
+                className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
+                  formData.isPublic ? "bg-green-600" : "bg-gray-600"
+                }`}
+              >
+                <div
+                  className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform duration-300 ${
+                    formData.isPublic ? "translate-x-6" : "translate-x-0"
+                  }`}
+                />
+              </button>
             </div>
 
             <button

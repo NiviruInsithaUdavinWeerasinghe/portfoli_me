@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { useOutletContext, useLocation } from "react-router-dom";
+import { useOutletContext, useLocation, useParams } from "react-router-dom";
 import {
   Plus,
   Search,
@@ -32,6 +32,11 @@ import ProjectCommentModal from "../../modals/ProjectCommentModal";
 export default function LiquidGlassUserProjects() {
   const { isEditMode } = useOutletContext();
   const { currentUser } = useAuth();
+  const { username } = useParams(); // Get UID
+
+  const targetUid = username || currentUser?.uid;
+  const isOwner = currentUser?.uid === targetUid;
+  const effectiveEditMode = isOwner && isEditMode;
 
   // Highlighting Logic
   const location = useLocation();
@@ -88,16 +93,16 @@ export default function LiquidGlassUserProjects() {
 
   // Define fetchProjects with useCallback
   const fetchProjects = useCallback(async () => {
-    if (!currentUser) return;
+    if (!targetUid) return; // Check targetUid
     try {
       setLoading(true);
-      const data = await getUserProjects(currentUser.uid);
+      const data = await getUserProjects(targetUid); // Use targetUid
 
       // Fetch comment counts for each project
       const projectsWithCounts = await Promise.all(
         data.map(async (project) => {
           const comments = await getProjectComments(
-            currentUser.uid,
+            targetUid, // Use targetUid
             project.id
           );
           return { ...project, commentsCount: comments.length };
@@ -110,7 +115,7 @@ export default function LiquidGlassUserProjects() {
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, [targetUid]); // FIXED: Added targetUid dependency
 
   // Fetch Projects from Firestore
   useEffect(() => {
@@ -278,7 +283,7 @@ export default function LiquidGlassUserProjects() {
             </button>
           </div>
 
-          {isEditMode && (
+          {effectiveEditMode && (
             <button
               onClick={handleOpenAdd}
               className={`
@@ -339,7 +344,7 @@ export default function LiquidGlassUserProjects() {
                 project={project}
                 currentUser={currentUser}
                 isHighlighted={project.id === highlightedId}
-                isEditMode={isEditMode}
+                isEditMode={effectiveEditMode}
                 onClick={() => handleOpenView(project)}
                 onEdit={(e) => handleOpenEdit(e, project)}
                 onDelete={(e) => handleDeleteClick(e, project.id)}
@@ -352,7 +357,7 @@ export default function LiquidGlassUserProjects() {
                 project={project}
                 currentUser={currentUser}
                 isHighlighted={project.id === highlightedId}
-                isEditMode={isEditMode}
+                isEditMode={effectiveEditMode}
                 onClick={() => handleOpenView(project)}
                 onEdit={(e) => handleOpenEdit(e, project)}
                 onDelete={(e) => handleDeleteClick(e, project.id)}
@@ -483,6 +488,7 @@ const ProjectGridCard = ({
             {project.status}
           </span>
         </div>
+        {/* FIXED: Changed effectiveEditMode to isEditMode */}
         {isEditMode && (
           <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
@@ -666,6 +672,7 @@ const ProjectListCard = ({
           >
             {project.title}
           </h3>
+          {/* FIXED: Changed effectiveEditMode to isEditMode */}
           {isEditMode && (
             <div className="flex gap-2 flex-shrink-0">
               <button

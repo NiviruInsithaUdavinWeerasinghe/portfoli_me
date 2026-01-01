@@ -47,7 +47,7 @@ export default function Login() {
 
       if (docSnap.exists()) {
         // User exists, go straight to home
-        navigate("/demo_user/home");
+        navigate(`/${user.uid}/home`);
       } else {
         // New user, show onboarding
         setShowOnboarding(true);
@@ -75,7 +75,7 @@ export default function Login() {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
-        navigate("/demo_user/home");
+        navigate(`/${user.uid}/home`);
       } else {
         setShowOnboarding(true);
       }
@@ -113,7 +113,7 @@ export default function Login() {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
-        navigate("/demo_user/home");
+        navigate(`/${user.uid}/home`);
       } else {
         setShowOnboarding(true);
       }
@@ -132,7 +132,9 @@ export default function Login() {
   // Called after Modal saves data successfully
   const handleOnboardingComplete = () => {
     setShowOnboarding(false);
-    navigate("/demo_user/home");
+    if (currentUser?.uid) {
+      navigate(`/${currentUser.uid}/home`);
+    }
   };
 
   // Handle smooth transition back to Home
@@ -185,7 +187,7 @@ export default function Login() {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
-        navigate("/demo_user/home");
+        navigate(`/${user.uid}/home`);
       } else {
         // Logged in but no profile data -> Onboarding
         setShowOnboarding(true);

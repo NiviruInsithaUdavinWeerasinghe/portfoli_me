@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from "react";
+// --- NEW IMPORTS FOR FETCHING NAME & UPDATING STATUS ---
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { db } from "../../lib/firebase";
 import {
   Outlet,
   useParams,
@@ -21,10 +24,14 @@ import {
 } from "lucide-react";
 
 const LiquidGlassPortfolioLayout = () => {
-  const { username } = useParams();
+  const { username } = useParams(); // This 'username' is actually the UID from the URL
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
+
+  // Check if the viewer is the owner
+  // Ensure we compare strings safely
+  const isOwner = currentUser?.uid && username && currentUser.uid === username;
 
   // States
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -33,6 +40,67 @@ const LiquidGlassPortfolioLayout = () => {
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);
 
+  // NEW STATE for breadcrumb name
+  const [breadcrumbName, setBreadcrumbName] = useState("Loading...");
+
+  // --- NEW: PRESENCE MANAGEMENT SYSTEM ---
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+
+    const userRef = doc(db, "users", currentUser.uid);
+
+    // 1. Set Online on mount
+    updateDoc(userRef, { isOnline: true }).catch((err) =>
+      console.error("Error setting online:", err)
+    );
+
+    // 2. Set Offline on Window Close/Tab Close
+    const handleTabClose = () => {
+      // Note: This is best-effort. For 100% accuracy on disconnect, Cloud Functions/RTDB is needed.
+      updateDoc(userRef, { isOnline: false });
+    };
+
+    window.addEventListener("beforeunload", handleTabClose);
+
+    // 3. Set Offline on Unmount (Logout or Navigation away if logic dictates)
+    return () => {
+      window.removeEventListener("beforeunload", handleTabClose);
+      updateDoc(userRef, { isOnline: false });
+    };
+  }, [currentUser]);
+
+  // NEW EFFECT: Fetch the display name associated with the URL UID
+  useEffect(() => {
+    const fetchDisplayName = async () => {
+      if (!username) return;
+
+      // 1. If viewing own profile, use auth data immediately
+      if (currentUser && currentUser.uid === username) {
+        setBreadcrumbName(currentUser.displayName || "My Portfolio");
+        return;
+      }
+
+      // 2. If viewing someone else's, fetch their basic info
+      try {
+        const userDocRef = doc(db, "users", username);
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (userDocSnap.exists()) {
+          const data = userDocSnap.data();
+          // Use displayName, fallback to name, fallback to generic
+          setBreadcrumbName(data.displayName || data.name || "Portfolio View");
+        } else {
+          setBreadcrumbName("Unknown User");
+        }
+      } catch (error) {
+        console.error("Error fetching breadcrumb name:", error);
+        setBreadcrumbName("Portfolio");
+      }
+    };
+
+    fetchDisplayName();
+  }, [username, currentUser]);
+
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 20);
@@ -40,6 +108,13 @@ const LiquidGlassPortfolioLayout = () => {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Safety: Force Edit Mode OFF if user is not the owner
+  useEffect(() => {
+    if (!isOwner && isEditMode) {
+      setIsEditMode(false);
+    }
+  }, [isOwner, isEditMode]);
 
   const handleLogout = async () => {
     try {
@@ -60,7 +135,7 @@ const LiquidGlassPortfolioLayout = () => {
       <header className="fixed top-0 left-0 right-0 z-50 transition-all duration-500 ease-in-out px-4 py-4 md:px-8">
         <div
           className={`
-            max-w-7xl mx-auto border rounded-2xl h-20 flex items-center justify-between px-6 transition-all duration-500
+            max-w-[95%] mx-auto border rounded-2xl h-20 flex items-center justify-between px-6 transition-all duration-500
             ${
               scrolled
                 ? "bg-gray-900/70 backdrop-blur-xl border-white/10 shadow-2xl shadow-black/20"
@@ -93,22 +168,26 @@ const LiquidGlassPortfolioLayout = () => {
               icon={<Briefcase size={18} />}
               label="Projects"
             />
-            <NavItem
-              to={`/${username}/settings`}
-              icon={<Settings size={18} />}
-              label="Settings"
-            />
+            {/* Only show Settings if isOwner */}
+            {isOwner && (
+              <NavItem
+                to={`/${username}/settings`}
+                icon={<Settings size={18} />}
+                label="Settings"
+              />
+            )}
           </nav>
 
           {/* 3. RIGHT: Actions & Profile */}
           <div className="flex items-center gap-4 animate-in slide-in-from-right-4 duration-700">
-            {/* Edit Mode Toggle */}
-            <div
-              className="hidden md:flex items-center gap-3 pl-5 pr-1.5 py-1.5 bg-[#0f1623] border border-white/5 rounded-full cursor-pointer hover:border-white/20 hover:bg-[#131b2c] transition-all duration-300 active:scale-95 shadow-inner group"
-              onClick={() => setIsEditMode(!isEditMode)}
-            >
-              <span
-                className={`
+            {/* Edit Mode Toggle - Only show if Owner */}
+            {isOwner && (
+              <div
+                className="hidden md:flex items-center gap-3 pl-5 pr-1.5 py-1.5 bg-[#0f1623] border border-white/5 rounded-full cursor-pointer hover:border-white/20 hover:bg-[#131b2c] transition-all duration-300 active:scale-95 shadow-inner group"
+                onClick={() => setIsEditMode(!isEditMode)}
+              >
+                <span
+                  className={`
                   text-[11px] font-black tracking-[0.15em] uppercase transition-colors duration-300 select-none 
                   ${
                     isEditMode
@@ -116,11 +195,11 @@ const LiquidGlassPortfolioLayout = () => {
                       : "text-slate-400 group-hover:text-slate-300"
                   }
                 `}
-              >
-                {isEditMode ? "EDIT" : "VIEW"}
-              </span>
-              <div
-                className={`
+                >
+                  {isEditMode ? "EDIT" : "VIEW"}
+                </span>
+                <div
+                  className={`
                   relative w-11 h-6 rounded-full transition-colors duration-500 ease-out border border-white/5 
                   ${
                     isEditMode
@@ -128,15 +207,16 @@ const LiquidGlassPortfolioLayout = () => {
                       : "bg-slate-800 ring-1 ring-white/5"
                   }
                 `}
-              >
-                <div
-                  className={`
+                >
+                  <div
+                    className={`
                     absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.3)] transform transition-transform duration-500 
                     ${isEditMode ? "translate-x-5" : "translate-x-0"}
                   `}
-                />
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Notification Dropdown */}
             <div className="relative">
@@ -351,12 +431,17 @@ const LiquidGlassPortfolioLayout = () => {
                 label="Projects"
                 onClick={() => setIsMobileMenuOpen(false)}
               />
-              <MobileNavItem
-                to={`/${username}/settings`}
-                icon={<Settings size={18} />}
-                label="Settings"
-                onClick={() => setIsMobileMenuOpen(false)}
-              />
+
+              {/* FIXED: Only show Settings in Mobile Menu if Owner */}
+              {isOwner && (
+                <MobileNavItem
+                  to={`/${username}/settings`}
+                  icon={<Settings size={18} />}
+                  label="Settings"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                />
+              )}
+
               <div className="h-px bg-white/5 my-2"></div>
               <button
                 onClick={handleLogout}
@@ -372,16 +457,17 @@ const LiquidGlassPortfolioLayout = () => {
 
       {/* --- MAIN CONTENT --- */}
       <main className="flex-1 relative pt-28 px-4 md:px-8 pb-10">
-        <div className="max-w-6xl mx-auto relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
+        <div className="max-w-[90%] mx-auto relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
           <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
-            <span>{username}</span>
+            {/* FIX: Show fetched name instead of raw UID */}
+            <span className="font-medium text-gray-400">{breadcrumbName}</span>
             <ChevronDown size={12} className="-rotate-90" />
             <span className="text-white font-medium capitalize">
               {location.pathname.split("/").pop()}
             </span>
           </div>
-          {/* UPDATED: Passing setIsEditMode so child pages can toggle it */}
-          <Outlet context={{ isEditMode, setIsEditMode }} />
+          {/* Passing isEditMode and isOwner to child pages */}
+          <Outlet context={{ isEditMode, setIsEditMode, isOwner }} />
         </div>
       </main>
     </div>
