@@ -43,6 +43,15 @@ export default function AddEditProjectModal({
 
   // Ref to manage the editor DOM element directly
   const editorRef = useRef(null);
+  // NEW: Ref to manage the main modal container for Focus (needed for Ctrl+V)
+  const modalRef = useRef(null);
+
+  // NEW: Auto-focus the modal when it opens to capture Paste events
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      modalRef.current.focus();
+    }
+  }, [isOpen]);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -57,12 +66,41 @@ export default function AddEditProjectModal({
     thumbnail: "",
   });
 
+  // NEW: Track original data for unsaved changes detection
+  const [initialFormData, setInitialFormData] = useState(null);
+
+  // NEW: Warn user about unsaved changes on page reload/close
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      // Check if formData matches initialFormData
+      if (
+        initialFormData &&
+        JSON.stringify(formData) !== JSON.stringify(initialFormData)
+      ) {
+        e.preventDefault();
+        e.returnValue =
+          "You have unsaved changes. Are you sure you want to leave?";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [formData, initialFormData]);
+
   const [repos, setRepos] = useState([]);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [githubToken, setGithubToken] = useState(null);
-  const [uploading, setUploading] = useState(false);
+
+  // UPDATED: Use a counter to track multiple concurrent/queued uploads
+  const [uploadCounter, setUploadCounter] = useState(0);
+  const uploading = uploadCounter > 0; // Derived state for UI
+
+  // NEW: A Promise Queue to ensure batches are processed in strict order (First In, First Out)
+  const uploadQueue = useRef(Promise.resolve());
+
   const [tagInput, setTagInput] = useState("");
   const [error, setError] = useState("");
+  const [isDragging, setIsDragging] = useState(false); // NEW: Drag state
 
   // --- Text Editor State & Logic ---
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -318,19 +356,24 @@ export default function AddEditProjectModal({
     setActiveFormats({});
     setLinkData({ text: "", url: "" });
 
+    let startData; // Helper to capture the baseline state
+
     if (initialData) {
-      setFormData({
+      startData = {
         ...initialData,
         startDate: initialData.startDate || "",
         endDate: initialData.endDate || "",
         thumbnail: initialData.thumbnail || initialData.image || "",
-      });
+      };
+      setFormData(startData);
+      setInitialFormData(startData); // NEW: Set baseline for comparison
+
       if (editorRef.current) {
         editorRef.current.innerHTML = initialData.description || "";
         updateListNumbering(); // Run logic on load
       }
     } else {
-      setFormData({
+      startData = {
         title: "",
         description: "",
         status: "Ongoing",
@@ -341,7 +384,10 @@ export default function AddEditProjectModal({
         tags: [],
         media: [],
         thumbnail: "",
-      });
+      };
+      setFormData(startData);
+      setInitialFormData(startData); // NEW: Set baseline for comparison
+
       if (editorRef.current) {
         editorRef.current.innerHTML = "";
       }
@@ -383,8 +429,8 @@ export default function AddEditProjectModal({
     if (name === "startDate" || name === "endDate") setError("");
   };
 
-  const handleFileChange = async (e) => {
-    const files = Array.from(e.target.files);
+  // Reusable function to process files from Input, Drop, or Paste
+  const processFiles = (files) => {
     if (files.length === 0) return;
 
     // VALIDATION: Check for allowed types (Image, Video, PDF)
@@ -401,39 +447,100 @@ export default function AddEditProjectModal({
       setError(
         "Invalid file type. Only images, videos, gifs, and PDFs are allowed."
       );
-      e.target.value = ""; // Reset input so user can retry immediately
       return;
     }
 
-    // Clear previous errors and start upload
     setError("");
-    setUploading(true);
 
-    try {
-      const uploadPromises = files.map((file) => uploadFileToCloudinary(file));
-      const uploadedMedia = await Promise.all(uploadPromises);
-      setFormData((prev) => {
-        // combine existing and new media
-        const allMedia = [...(prev.media || []), ...uploadedMedia];
+    // 1. Immediately signal that uploading has started (increments counter)
+    setUploadCounter((prev) => prev + 1);
 
-        // Find the first non-video item to use as thumbnail if one isn't set
-        const firstValidImage = allMedia.find((m) => m.type !== "video");
+    // 2. Add this batch to the Queue.
+    // This ensures Batch B waits for Batch A to finish before starting/displaying.
+    // This preserves the exact order of selection/dropping.
+    uploadQueue.current = uploadQueue.current.then(async () => {
+      try {
+        const uploadPromises = files.map((file) =>
+          uploadFileToCloudinary(file)
+        );
+        // Wait for all files in *this* specific batch to finish
+        const uploadedMedia = await Promise.all(uploadPromises);
 
-        const newThumbnail =
-          !prev.thumbnail && firstValidImage
-            ? getPreviewUrl(firstValidImage)
-            : prev.thumbnail;
+        // Update State (Show previews only after this batch is fully done)
+        setFormData((prev) => {
+          const currentMedia = prev.media || [];
+          // Appending to the end ensures order is preserved based on queue execution
+          const allMedia = [...currentMedia, ...uploadedMedia];
 
-        return {
-          ...prev,
-          media: allMedia,
-          thumbnail: newThumbnail,
-        };
-      });
-    } catch (error) {
-      alert("Error uploading files");
-    } finally {
-      setUploading(false);
+          // Find the first non-video item to use as thumbnail if one isn't set
+          const firstValidImage = allMedia.find((m) => m.type !== "video");
+          const newThumbnail =
+            !prev.thumbnail && firstValidImage
+              ? getPreviewUrl(firstValidImage)
+              : prev.thumbnail;
+
+          return {
+            ...prev,
+            media: allMedia,
+            thumbnail: newThumbnail,
+          };
+        });
+
+        // Also update tempMedia if we are currently in edit mode
+        if (isEditingMedia) {
+          setTempMedia((prev) => [...prev, ...uploadedMedia]);
+        }
+      } catch (error) {
+        console.error("Upload failed", error);
+        setError("Failed to upload one or more files.");
+      } finally {
+        // 3. Decrement counter only when this specific batch is truly done
+        setUploadCounter((prev) => prev - 1);
+      }
+    });
+  };
+
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files);
+    processFiles(files);
+    e.target.value = ""; // Reset input
+  };
+
+  // Drag & Drop + Paste Handlers
+  const handleDragOverUpload = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeaveUpload = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // NEW: Check if we are actually leaving the drop zone (modal) vs entering a child element
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDropUpload = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) processFiles(files);
+  };
+
+  const handlePasteUpload = (e) => {
+    const items = e.clipboardData.items;
+    const files = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].kind === "file") {
+        files.push(items[i].getAsFile());
+      }
+    }
+    if (files.length > 0) {
+      e.preventDefault();
+      processFiles(files);
     }
   };
 
@@ -662,6 +769,19 @@ export default function AddEditProjectModal({
   const [isEditingMedia, setIsEditingMedia] = useState(false);
   const [tempMedia, setTempMedia] = useState([]);
   const [showMediaHelp, setShowMediaHelp] = useState(false); // NEW STATE
+  const [isClearing, setIsClearing] = useState(false); // NEW: Animation state
+
+  // NEW: Smoothly clear all media with transition
+  const handleClearMedia = () => {
+    if (formData.media.length === 0) return;
+    setIsClearing(true);
+    // Wait for animation (500ms) to finish before removing data
+    setTimeout(() => {
+      setFormData((prev) => ({ ...prev, media: [], thumbnail: "" }));
+      setIsClearing(false);
+    }, 500);
+  };
+
   const handleEnterEditMode = () => {
     setTempMedia([...(formData.media || [])]);
     setIsEditingMedia(true);
@@ -691,9 +811,10 @@ export default function AddEditProjectModal({
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active{ -webkit-background-clip: text; -webkit-text-fill-color: #ffffff; transition: background-color 5000s ease-in-out 0s; box-shadow: inset 0 0 20px 20px 23232329; }
-        input[type="date"] { color-scheme: dark; }
-        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; opacity: 0.6; transition: all 0.2s; }
-        input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(346deg) brightness(118%) contrast(119%); }
+        /* Updated selectors from [type="date"] to [type="month"] to style the month picker */
+        input[type="month"] { color-scheme: dark; }
+        input[type="month"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; opacity: 0.6; transition: all 0.2s; }
+        input[type="month"]::-webkit-calendar-picker-indicator:hover { opacity: 1; filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(346deg) brightness(118%) contrast(119%); }
       `}</style>
 
       {/* ... [PREVIEW MODAL KEPT AS IS] ... */}
@@ -749,7 +870,25 @@ export default function AddEditProjectModal({
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-4xl bg-[#0B1120] border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-4">
+      {/* Handlers moved to this main container */}
+      <div
+        ref={modalRef} // Added Ref
+        tabIndex={-1} // Added tabIndex to make div focusable
+        onDragOver={handleDragOverUpload}
+        onDragLeave={handleDragLeaveUpload}
+        onDrop={handleDropUpload}
+        onPaste={handlePasteUpload}
+        className="relative w-full max-w-4xl bg-[#0B1120] border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-4 outline-none"
+      >
+        {/* NEW: Full Overlay when dragging */}
+        {isDragging && (
+          <div className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-sm rounded-2xl border-2 border-dashed border-orange-500 flex flex-col items-center justify-center pointer-events-none animate-in fade-in duration-200">
+            <UploadCloud size={64} className="text-orange-500 mb-4" />
+            <h3 className="text-2xl font-bold text-white">Drop files here</h3>
+            <p className="text-gray-400 mt-2">to add them to your project</p>
+          </div>
+        )}
+
         {/* ... [HEADER KEPT AS IS] ... */}
         <div className="flex items-center justify-between p-6 border-b border-white/5">
           <div className="flex items-center gap-4 flex-wrap">
@@ -795,14 +934,24 @@ export default function AddEditProjectModal({
                   </span>
                 </label>
                 {!isEditingMedia && formData.media?.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleEnterEditMode}
-                    className="text-xs flex items-center gap-1.5 text-orange-500 hover:text-orange-400 transition-colors bg-orange-500/10 hover:bg-orange-500/20 px-3 py-1.5 rounded-lg"
-                  >
-                    <Edit size={12} />
-                    Edit Details
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleClearMedia}
+                      className="text-xs flex items-center gap-1.5 text-red-400 hover:text-red-300 transition-colors bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-lg"
+                    >
+                      <Trash2 size={12} />
+                      Clear All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleEnterEditMode}
+                      className="text-xs flex items-center gap-1.5 text-orange-500 hover:text-orange-400 transition-colors bg-orange-500/10 hover:bg-orange-500/20 px-3 py-1.5 rounded-lg"
+                    >
+                      <Edit size={12} />
+                      Edit Details
+                    </button>
+                  </div>
                 )}
               </div>
               {isEditingMedia ? (
@@ -875,7 +1024,13 @@ export default function AddEditProjectModal({
               ) : (
                 /* ... Normal Grid View ... */
                 <>
-                  <div className="flex flex-wrap gap-3 mb-3 animate-in fade-in zoom-in duration-300">
+                  <div
+                    className={`flex flex-wrap gap-3 mb-3 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                      isClearing
+                        ? "opacity-0 scale-95 blur-sm translate-y-2"
+                        : "animate-in fade-in zoom-in duration-300"
+                    }`}
+                  >
                     {formData.media?.map((item, idx) => {
                       const isThumbnail =
                         getPreviewUrl(item) === formData.thumbnail;
@@ -944,7 +1099,10 @@ export default function AddEditProjectModal({
                         </div>
                       );
                     })}
-                    <label className="w-20 h-20 border-2 border-dashed border-white/10 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 hover:border-orange-500/50 transition-all duration-300 group">
+                    <label
+                      // Handlers removed from here as they are now on the parent
+                      className="w-20 h-20 border-2 border-dashed border-white/10 hover:bg-white/5 hover:border-orange-500/50 rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-300 group"
+                    >
                       {uploading ? (
                         <Loader2
                           className="animate-spin text-orange-500"
@@ -952,7 +1110,11 @@ export default function AddEditProjectModal({
                         />
                       ) : (
                         <UploadCloud
-                          className="text-gray-500 group-hover:text-orange-500 mb-1 transition-colors"
+                          className={`mb-1 transition-colors ${
+                            isDragging
+                              ? "text-orange-500"
+                              : "text-gray-500 group-hover:text-orange-500"
+                          }`}
                           size={18}
                         />
                       )}
@@ -1053,8 +1215,9 @@ export default function AddEditProjectModal({
                       error ? "border-red-500/50" : "border-white/10"
                     }`}
                   >
+                    {/* Changed type="date" to type="month" */}
                     <input
-                      type="date"
+                      type="month"
                       name="startDate"
                       lang="en-GB"
                       value={formData.startDate}
@@ -1070,8 +1233,9 @@ export default function AddEditProjectModal({
                       error ? "border-red-500/50" : "border-white/10"
                     }`}
                   >
+                    {/* Changed type="date" to type="month" */}
                     <input
-                      type="date"
+                      type="month"
                       name="endDate"
                       lang="en-GB"
                       value={formData.endDate}

@@ -106,6 +106,7 @@ export const getProjectComments = async (projectOwnerId, projectId) => {
       projectId,
       "comments"
     );
+    // We order by CreatedAt to keep the conversation linear in time
     const q = query(commentsRef, orderBy("createdAt", "asc"));
     const snapshot = await getDocs(q);
     return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -161,24 +162,27 @@ export const deleteProjectComment = async (
   }
 };
 
+// REFACTORED: Now adds a new document with a parentId instead of updating a field.
+// This supports infinite nesting.
 export const addCommentReply = async (
   projectOwnerId,
   projectId,
-  commentId,
+  parentId,
   replyData
 ) => {
   try {
-    const commentRef = doc(
+    const commentsRef = collection(
       db,
       "users",
       projectOwnerId,
       "projects",
       projectId,
-      "comments",
-      commentId
+      "comments"
     );
-    await updateDoc(commentRef, {
-      reply: replyData, // Single level reply embedded
+    await addDoc(commentsRef, {
+      ...replyData,
+      parentId: parentId, // Link to the parent comment
+      createdAt: serverTimestamp(),
     });
   } catch (error) {
     console.error("Error adding reply:", error);

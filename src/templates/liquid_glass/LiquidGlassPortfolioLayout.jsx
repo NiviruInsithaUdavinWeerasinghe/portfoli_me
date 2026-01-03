@@ -40,8 +40,29 @@ const LiquidGlassPortfolioLayout = () => {
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);
 
+  // NEW: State to store the Firestore photoURL (for Email/Password users)
+  const [dbPhotoURL, setDbPhotoURL] = useState(null);
+
   // NEW STATE for breadcrumb name
   const [breadcrumbName, setBreadcrumbName] = useState("Loading...");
+
+  // --- NEW: FETCH DB AVATAR FOR CURRENT USER ---
+  // This ensures we get the picture even if Auth provider (Email/Pass) doesn't have it synced
+  useEffect(() => {
+    const fetchUserAvatar = async () => {
+      if (!currentUser?.uid) return;
+      try {
+        const userDocRef = doc(db, "users", currentUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          setDbPhotoURL(userDocSnap.data().photoURL);
+        }
+      } catch (error) {
+        console.error("Error fetching user avatar:", error);
+      }
+    };
+    fetchUserAvatar();
+  }, [currentUser]);
 
   // --- NEW: PRESENCE MANAGEMENT SYSTEM ---
   useEffect(() => {
@@ -127,6 +148,12 @@ const LiquidGlassPortfolioLayout = () => {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white flex flex-col font-sans selection:bg-orange-500 selection:text-white relative overflow-x-hidden">
+      {/* Hide Scrollbar CSS */}
+      <style>{`
+        ::-webkit-scrollbar { display: none; }
+        html, body { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
+
       {/* --- BACKGROUND FX --- */}
       <div className="fixed top-[-10%] left-[-10%] w-96 h-96 bg-blue-600/20 rounded-full blur-[120px] pointer-events-none z-0" />
       <div className="fixed bottom-[-10%] right-[-10%] w-96 h-96 bg-orange-600/10 rounded-full blur-[120px] pointer-events-none z-0" />
@@ -267,9 +294,10 @@ const LiquidGlassPortfolioLayout = () => {
                 }}
               >
                 <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 p-0.5 shadow-lg shadow-purple-500/20">
-                  {currentUser?.photoURL ? (
+                  {/* UPDATED: Check dbPhotoURL first, then currentUser.photoURL */}
+                  {dbPhotoURL || currentUser?.photoURL ? (
                     <img
-                      src={currentUser.photoURL}
+                      src={dbPhotoURL || currentUser.photoURL}
                       alt="User"
                       className="w-full h-full rounded-full object-cover border-2 border-black"
                     />

@@ -3,17 +3,308 @@ import { createPortal } from "react-dom";
 import {
   X,
   Send,
-  MoreVertical,
   Trash2,
-  Edit2,
+  MessageCircle,
+  MoreVertical,
   CornerDownRight,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  ArrowLeft,
 } from "lucide-react";
 import {
-  getProjectComments,
   addProjectComment,
   deleteProjectComment,
   addCommentReply,
 } from "../services/projectService";
+import { db } from "../lib/firebase";
+import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+
+// --- Recursive Component for Comment Nodes ---
+const CommentNode = ({
+  comment,
+  allComments,
+  projectOwnerId,
+  currentUser,
+  activeMenuId,
+  setActiveMenuId,
+  deleteConfirmId,
+  setDeleteConfirmId,
+  replyingTo,
+  setReplyingTo,
+  replyText,
+  setReplyText,
+  onReplySubmit,
+  onDeleteSubmit,
+  depth = 0,
+  onNavigate,
+}) => {
+  // CHANGED: Default is now false so you must click to view replies
+  const [showReplies, setShowReplies] = useState(false);
+  // NEW: State to handle text expansion
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const isOwnerComment = comment.userId === projectOwnerId;
+  const canReply = !!currentUser;
+  const canDelete =
+    currentUser?.uid === comment.userId || currentUser?.uid === projectOwnerId;
+
+  // Filter children for this node
+  const children = allComments.filter((c) => c.parentId === comment.id);
+  const hasChildren = children.length > 0;
+
+  // Logic: If depth is 3 and has children, show "View replies" link instead of recursion
+  const isMaxDepth = depth >= 3;
+
+  // Text truncation logic
+  const MAX_LENGTH = 150;
+  const text = comment.text || "";
+  const isLongText = text.length > MAX_LENGTH;
+
+  return (
+    <div className="flex flex-col mt-4 animate-in fade-in slide-in-from-bottom-2 duration-500 ease-out">
+      {/* Comment Row: Avatar + Content */}
+      <div className="flex gap-3 group relative">
+        {/* Avatar */}
+        <div className="flex-shrink-0 z-10">
+          <img
+            src={comment.userAvatar || "https://via.placeholder.com/40"}
+            alt={comment.userName}
+            className={`w-8 h-8 rounded-full object-cover border-2 transition-all duration-300 group-hover:scale-105 ${
+              isOwnerComment ? "border-orange-500" : "border-white/10"
+            }`}
+          />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {/* Header: Name + Badge */}
+          <div className="flex items-center gap-2 mb-1">
+            <span
+              className={`text-sm font-bold truncate transition-colors duration-200 ${
+                isOwnerComment ? "text-orange-500" : "text-white"
+              }`}
+            >
+              {comment.userName}
+            </span>
+            {isOwnerComment && (
+              <span className="text-[10px] bg-orange-500/10 text-orange-500 border border-orange-500/20 px-1.5 rounded select-none">
+                Owner
+              </span>
+            )}
+          </div>
+
+          {/* Content Logic */}
+          {deleteConfirmId === comment.id ? (
+            // Custom Delete Confirmation
+            <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-3 flex items-center justify-between animate-in zoom-in-95 fade-in duration-300 ease-out">
+              <div className="flex items-center gap-2 text-red-400 text-xs font-bold">
+                <AlertTriangle size={14} />
+                <span>Delete?</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setDeleteConfirmId(null)}
+                  className="px-3 py-1 text-xs text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-all duration-200 active:scale-95"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => onDeleteSubmit(comment.id)}
+                  className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-500 transition-all duration-200 shadow-lg shadow-red-900/20 active:scale-95"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          ) : (
+            // Normal Comment Bubble
+            <div className="relative">
+              <div
+                className={`
+                  p-3 rounded-2xl rounded-tl-none text-sm break-words leading-relaxed shadow-sm transition-colors duration-300
+                  ${
+                    isOwnerComment
+                      ? "bg-gradient-to-br from-orange-500/20 to-orange-900/10 border border-orange-500/20 text-white"
+                      : "bg-white/5 border border-white/5 text-gray-200 hover:bg-white/10 hover:border-white/10"
+                  }
+                `}
+              >
+                {/* Text Truncation Logic */}
+                {isLongText && !isExpanded ? (
+                  <>
+                    {text.slice(0, MAX_LENGTH)}...
+                    <button
+                      onClick={() => setIsExpanded(true)}
+                      className="ml-2 text-xs font-bold text-orange-500 hover:text-orange-400 hover:underline transition-colors duration-200"
+                    >
+                      See more
+                    </button>
+                  </>
+                ) : (
+                  text
+                )}
+              </div>
+
+              {/* Dot Menu */}
+              {(canReply || canDelete) && (
+                <div className="absolute top-0 right-0 -mt-2 -mr-2 opacity-0 group-hover:opacity-100 transition-all duration-200 ease-in-out z-20 transform translate-y-1 group-hover:translate-y-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveMenuId(
+                        activeMenuId === comment.id ? null : comment.id
+                      );
+                    }}
+                    className="p-1.5 text-gray-400 hover:text-white bg-[#0F1623] border border-white/10 rounded-full shadow-lg transition-all duration-200 hover:scale-110 active:scale-90"
+                  >
+                    <MoreVertical size={14} />
+                  </button>
+
+                  {/* Dropdown */}
+                  {activeMenuId === comment.id && (
+                    <div
+                      className="absolute right-0 top-8 w-32 bg-[#0F1623] border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 ease-out z-50 ring-1 ring-white/5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {canReply && (
+                        <button
+                          onClick={() => {
+                            setReplyingTo(comment.id);
+                            setActiveMenuId(null);
+                            // Auto-expand replies if replying so input is visible
+                            setShowReplies(true);
+                          }}
+                          className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-300 hover:bg-white/5 hover:text-white transition-colors duration-200 text-left active:bg-white/10"
+                        >
+                          <CornerDownRight
+                            size={14}
+                            className="text-orange-500"
+                          />
+                          Reply
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => {
+                            setDeleteConfirmId(comment.id);
+                            setActiveMenuId(null);
+                          }}
+                          className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors duration-200 text-left border-t border-white/5 active:bg-red-500/20"
+                        >
+                          <Trash2 size={14} />
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Reply Input Form */}
+          {replyingTo === comment.id && (
+            <div className="mt-3 flex gap-2 animate-in slide-in-from-left-4 fade-in duration-300 ease-out">
+              <div className="w-4 border-b-2 border-l-2 border-gray-700 rounded-bl-xl h-4 -mt-2 opacity-50" />
+              <div className="flex-1 flex gap-2">
+                <input
+                  type="text"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder={`Reply to ${comment.userName}...`}
+                  className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-all duration-300"
+                  autoFocus
+                  onKeyDown={(e) =>
+                    e.key === "Enter" && onReplySubmit(comment.id)
+                  }
+                />
+                <button
+                  onClick={() => onReplySubmit(comment.id)}
+                  className="p-2 bg-orange-600 rounded-xl text-white hover:bg-orange-500 transition-all duration-200 hover:scale-105 active:scale-95"
+                >
+                  <Send size={16} />
+                </button>
+                <button
+                  onClick={() => setReplyingTo(null)}
+                  className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 active:rotate-90"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Children or "New Page" Link */}
+      {hasChildren && (
+        <div className="ml-4 pl-4 border-l-2 border-white/5 mt-2 transition-all duration-300">
+          {isMaxDepth ? (
+            <button
+              onClick={() => onNavigate(comment)}
+              className="flex items-center gap-2 text-xs font-bold text-orange-500 hover:text-orange-400 transition-all duration-200 py-2 group hover:translate-x-1"
+            >
+              <div className="w-4 h-px bg-orange-500/50 group-hover:bg-orange-400 transition-colors duration-200" />
+              View {children.length}
+              {" more "}
+              {children.length === 1 ? "reply" : "replies"}
+              <CornerDownRight size={12} />
+            </button>
+          ) : (
+            <>
+              {showReplies ? (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-300 ease-out origin-top">
+                  {children.map((child) => (
+                    <CommentNode
+                      key={child.id}
+                      comment={child}
+                      allComments={allComments}
+                      projectOwnerId={projectOwnerId}
+                      currentUser={currentUser}
+                      activeMenuId={activeMenuId}
+                      setActiveMenuId={setActiveMenuId}
+                      deleteConfirmId={deleteConfirmId}
+                      setDeleteConfirmId={setDeleteConfirmId}
+                      replyingTo={replyingTo}
+                      setReplyingTo={setReplyingTo}
+                      replyText={replyText}
+                      setReplyText={setReplyText}
+                      onReplySubmit={onReplySubmit}
+                      onDeleteSubmit={onDeleteSubmit}
+                      depth={depth + 1}
+                      onNavigate={onNavigate}
+                    />
+                  ))}
+                  {/* Collapser only if there are many items */}
+                  {children.length > 2 && (
+                    <button
+                      onClick={() => setShowReplies(false)}
+                      className="flex items-center gap-2 text-xs font-medium text-gray-600 hover:text-gray-400 transition-all duration-200 mt-3 hover:-translate-y-0.5"
+                    >
+                      <div className="w-4 h-px bg-gray-800 transition-colors" />
+                      <ChevronUp size={14} />
+                      Hide replies
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowReplies(true)}
+                  className="flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-orange-500 transition-all duration-200 py-1 hover:translate-x-1"
+                >
+                  <div className="w-4 h-px bg-gray-700 transition-colors duration-200 group-hover:bg-orange-500" />
+                  <ChevronDown size={14} />
+                  View {children.length}{" "}
+                  {children.length === 1 ? "reply" : "replies"}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function ProjectCommentModal({
   isOpen,
@@ -24,205 +315,244 @@ export default function ProjectCommentModal({
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // Navigation Stack for "New Page" Logic
+  const [navStack, setNavStack] = useState([]);
+
+  // Shared Interaction State
+  const [replyingTo, setReplyingTo] = useState(null);
   const [replyText, setReplyText] = useState("");
-  const [replyingTo, setReplyingTo] = useState(null); // commentId
+  const [activeMenuId, setActiveMenuId] = useState(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
-  // Ref for the comments end to auto-scroll
   const commentsEndRef = useRef(null);
+  const projectOwnerId = project?.ownerId;
 
-  const isOwner =
-    currentUser?.uid === project?.ownerId ||
-    currentUser?.uid === project?.userId; // Adjust based on how ownerId is stored
-
+  // Close menus on outside click
   useEffect(() => {
-    if (isOpen && project) {
-      loadComments();
-    }
-  }, [isOpen, project]);
+    const handleClickOutside = () => setActiveMenuId(null);
+    if (activeMenuId) window.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, [activeMenuId]);
 
-  const loadComments = async () => {
+  // LIVE DATA LISTENER
+  useEffect(() => {
+    if (!isOpen || !project || !projectOwnerId) return;
+
     setLoading(true);
-    // Assuming project has an ownerId field, or we use the passed prop logic.
-    // In LiquidGlassUserProjects context, the project belongs to the profile being viewed.
-    // If viewing own projects, currentUser.uid is the owner.
-    const ownerId = project.ownerId || currentUser?.uid;
-    const data = await getProjectComments(ownerId, project.id);
-    setComments(data);
-    setLoading(false);
-  };
+    const commentsRef = collection(
+      db,
+      "users",
+      projectOwnerId,
+      "projects",
+      project.id,
+      "comments"
+    );
+    const q = query(commentsRef, orderBy("createdAt", "asc"));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const fetchedComments = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setComments(fetchedComments);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error listening to comments:", error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [isOpen, project, projectOwnerId]);
 
   const handleSend = async () => {
-    if (!newComment.trim() || !currentUser) return;
-
+    if (!newComment.trim() || !currentUser || !projectOwnerId) return;
     try {
-      const ownerId = project.ownerId || currentUser?.uid;
-      await addProjectComment(ownerId, project.id, {
+      await addProjectComment(projectOwnerId, project.id, {
         userId: currentUser.uid,
         userName: currentUser.displayName || "User",
         userAvatar: currentUser.photoURL,
         text: newComment,
       });
       setNewComment("");
-      loadComments();
+      setTimeout(
+        () =>
+          commentsEndRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "nearest",
+          }),
+        100
+      );
     } catch (error) {
       console.error("Failed to send comment", error);
     }
   };
 
-  const handleDelete = async (commentId) => {
-    if (!window.confirm("Delete this comment?")) return;
+  const handleReplySubmit = async (parentId) => {
+    if (!replyText.trim() || !projectOwnerId) return;
     try {
-      const ownerId = project.ownerId || currentUser?.uid;
-      await deleteProjectComment(ownerId, project.id, commentId);
-      loadComments();
-    } catch (error) {
-      console.error("Failed to delete comment", error);
-    }
-  };
-
-  const handleReply = async (commentId) => {
-    if (!replyText.trim()) return;
-    try {
-      const ownerId = project.ownerId || currentUser?.uid;
-      await addCommentReply(ownerId, project.id, commentId, {
+      await addCommentReply(projectOwnerId, project.id, parentId, {
         text: replyText,
-        createdAt: new Date(),
-        userName: currentUser.displayName || "Owner",
+        userId: currentUser.uid,
+        userName: currentUser.displayName || "User",
         userAvatar: currentUser.photoURL,
+        text: replyText, // Ensure text is passed correctly
       });
       setReplyText("");
       setReplyingTo(null);
-      loadComments();
     } catch (error) {
       console.error("Failed to reply", error);
     }
   };
 
+  const handleDeleteSubmit = async (commentId) => {
+    try {
+      await deleteProjectComment(projectOwnerId, project.id, commentId);
+      setDeleteConfirmId(null);
+    } catch (error) {
+      console.error("Failed to delete comment", error);
+    }
+  };
+
+  // Navigation Handlers
+  const handleNavigate = (comment) => {
+    setNavStack((prev) => [...prev, comment]);
+  };
+
+  const handleBack = () => {
+    setNavStack((prev) => prev.slice(0, -1));
+  };
+
+  // Determine what to display based on navigation stack
+  const currentThreadRoot =
+    navStack.length > 0 ? navStack[navStack.length - 1] : null;
+
+  // Filter comments for current view
+  const visibleComments = comments.filter((c) =>
+    currentThreadRoot ? c.parentId === currentThreadRoot.id : !c.parentId
+  );
+
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      {/* Backdrop */}
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity duration-500 ease-in-out"
         onClick={onClose}
       />
 
-      {/* Modal Window */}
-      <div className="relative w-full max-w-md h-[600px] bg-[#0B1120] border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-lg h-[80vh] bg-gray-900/80 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 ease-out ring-1 ring-white/5">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-white/5 bg-[#0B1120] z-10">
-          <h3 className="text-white font-bold">Comments</h3>
+        <div className="flex items-center justify-between p-5 border-b border-white/5 bg-gradient-to-r from-orange-500/10 to-transparent">
+          <div className="flex items-center gap-3">
+            {navStack.length > 0 ? (
+              <button
+                onClick={handleBack}
+                className="p-1.5 -ml-2 text-white hover:bg-white/10 rounded-full transition-all duration-200 hover:-translate-x-1 flex items-center gap-1 pr-3"
+              >
+                <ArrowLeft size={18} />
+                <span className="text-sm font-medium">Back</span>
+              </button>
+            ) : (
+              <div className="p-2 bg-orange-500/20 rounded-lg text-orange-500 transition-transform duration-300 hover:scale-110 hover:rotate-3">
+                <MessageCircle size={20} />
+              </div>
+            )}
+
+            <div
+              className={`transition-all duration-300 ${
+                navStack.length > 0 ? "border-l border-white/10 pl-3" : ""
+              }`}
+            >
+              <h3 className="text-white font-bold text-lg leading-tight animate-in fade-in duration-300">
+                {navStack.length > 0 ? "Thread" : "Discussion"}
+              </h3>
+              <p className="text-xs text-gray-400">
+                {navStack.length > 0
+                  ? `Replying to ${currentThreadRoot?.userName}`
+                  : `${comments.length} ${
+                      comments.length === 1 ? "comment" : "comments"
+                    }`}
+              </p>
+            </div>
+          </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/5"
+            className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-all duration-200 hover:rotate-90"
           >
             <X size={20} />
           </button>
         </div>
 
-        {/* Comments List (Scrollable, Hidden Scrollbar) */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-hide">
-          {loading ? (
-            <div className="text-center text-gray-500 py-10">
-              Loading comments...
+        {/* Thread Context (Top comment in new page) */}
+        {currentThreadRoot && (
+          <div className="bg-black/20 p-4 border-b border-white/5 animate-in slide-in-from-right-4 duration-300 ease-out">
+            <div className="flex gap-3 opacity-80">
+              <img
+                src={
+                  currentThreadRoot.userAvatar ||
+                  "https://via.placeholder.com/40"
+                }
+                className="w-6 h-6 rounded-full border border-white/10"
+                alt=""
+              />
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-bold text-white">
+                    {currentThreadRoot.userName}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {new Date(
+                      currentThreadRoot.createdAt?.toDate()
+                    ).toLocaleDateString()}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-300 line-clamp-2">
+                  {currentThreadRoot.text}
+                </p>
+              </div>
             </div>
-          ) : comments.length === 0 ? (
-            <div className="text-center text-gray-500 py-10">
-              No comments yet. Be the first!
+          </div>
+        )}
+
+        {/* Comments List */}
+        <div className="flex-1 overflow-y-auto p-5 custom-scrollbar scroll-smooth">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-2 animate-in fade-in duration-500">
+              <div className="animate-spin w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full" />
+              <span className="text-sm">Loading thoughts...</span>
+            </div>
+          ) : visibleComments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3 animate-in fade-in zoom-in-95 duration-500">
+              <MessageCircle size={40} className="text-gray-700" />
+              <p>No replies yet. Start the conversation!</p>
             </div>
           ) : (
-            comments.map((comment) => (
-              <div key={comment.id} className="group">
-                {/* Main Comment */}
-                <div className="flex gap-3">
-                  <img
-                    src={comment.userAvatar || "https://via.placeholder.com/40"}
-                    alt={comment.userName}
-                    className="w-8 h-8 rounded-full border border-white/10 object-cover"
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-sm font-bold text-white mr-2">
-                        {comment.userName}
-                      </span>
-                      {/* Delete option for comment owner */}
-                      {currentUser?.uid === comment.userId && (
-                        <button
-                          onClick={() => handleDelete(comment.id)}
-                          className="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-300 mt-1">{comment.text}</p>
-
-                    {/* Reply Button (Owner only, no nested replies) */}
-                    {isOwner && !comment.reply && !replyingTo && (
-                      <button
-                        onClick={() => setReplyingTo(comment.id)}
-                        className="text-xs text-orange-500 font-medium mt-2 hover:underline"
-                      >
-                        Reply
-                      </button>
-                    )}
-
-                    {/* Reply Input */}
-                    {replyingTo === comment.id && (
-                      <div className="mt-3 flex gap-2 animate-in slide-in-from-top-2">
-                        <input
-                          type="text"
-                          value={replyText}
-                          onChange={(e) => setReplyText(e.target.value)}
-                          placeholder="Write a reply..."
-                          className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-orange-500"
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => handleReply(comment.id)}
-                          className="p-1.5 bg-orange-600 rounded-lg text-white hover:bg-orange-700"
-                        >
-                          <Send size={14} />
-                        </button>
-                        <button
-                          onClick={() => setReplyingTo(null)}
-                          className="p-1.5 text-gray-400 hover:text-white"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Display Reply */}
-                {comment.reply && (
-                  <div className="ml-11 mt-3 flex gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
-                    <img
-                      src={
-                        comment.reply.userAvatar ||
-                        "https://via.placeholder.com/40"
-                      }
-                      alt={comment.reply.userName}
-                      className="w-6 h-6 rounded-full border border-white/10 object-cover"
-                    />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-orange-500">
-                          {comment.reply.userName}
-                        </span>
-                        <span className="text-[10px] text-gray-500 bg-white/5 px-1.5 py-0.5 rounded">
-                          Owner
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-300 mt-0.5">
-                        {comment.reply.text}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
+            visibleComments.map((comment) => (
+              <CommentNode
+                key={comment.id}
+                comment={comment}
+                allComments={comments}
+                projectOwnerId={projectOwnerId}
+                currentUser={currentUser}
+                activeMenuId={activeMenuId}
+                setActiveMenuId={setActiveMenuId}
+                deleteConfirmId={deleteConfirmId}
+                setDeleteConfirmId={setDeleteConfirmId}
+                replyingTo={replyingTo}
+                setReplyingTo={setReplyingTo}
+                replyText={replyText}
+                setReplyText={setReplyText}
+                onReplySubmit={handleReplySubmit}
+                onDeleteSubmit={handleDeleteSubmit}
+                // Reset depth if we are in a new page, otherwise inherit/increment
+                depth={0}
+                onNavigate={handleNavigate}
+              />
             ))
           )}
           <div ref={commentsEndRef} />
@@ -230,20 +560,25 @@ export default function ProjectCommentModal({
 
         {/* Footer Input */}
         {currentUser && (
-          <div className="p-4 bg-[#0B1120] border-t border-white/10">
-            <div className="flex gap-2">
+          <div className="p-5 bg-black/20 border-t border-white/5 backdrop-blur-md z-20">
+            <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl px-2 py-2 focus-within:bg-white/10 focus-within:border-orange-500/30 focus-within:shadow-lg focus-within:shadow-orange-500/10 transition-all duration-300 ease-in-out">
+              <img
+                src={currentUser.photoURL || "https://via.placeholder.com/40"}
+                alt="Me"
+                className="w-8 h-8 rounded-full object-cover border border-white/10 ml-2 transition-transform duration-300 hover:scale-105"
+              />
               <input
                 type="text"
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="Add a comment..."
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500 placeholder:text-gray-600"
+                className="flex-1 bg-transparent border-none text-sm text-white placeholder-gray-500 focus:ring-0 focus:outline-none py-2"
               />
               <button
                 onClick={handleSend}
                 disabled={!newComment.trim()}
-                className="bg-orange-600 text-white p-3 rounded-xl hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="p-2.5 bg-orange-600 rounded-xl text-white hover:bg-orange-500 disabled:opacity-50 disabled:bg-gray-700 disabled:cursor-not-allowed shadow-lg shadow-orange-900/20 transition-all duration-200 transform hover:scale-105 active:scale-95"
               >
                 <Send size={18} />
               </button>

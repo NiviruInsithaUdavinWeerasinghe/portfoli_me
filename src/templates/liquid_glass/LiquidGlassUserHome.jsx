@@ -1,6 +1,7 @@
 //C:\PortfoliMe\portfoli_me\src\templates\liquid_glass\LiquidGlassUserHome.jsx
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom"; // Added for Portal
 import {
   useOutletContext,
   Link,
@@ -51,6 +52,7 @@ import { getUserProjects } from "../../services/projectService";
 import { fetchUserRepositories } from "../../services/githubService";
 import { uploadFileToCloudinary } from "../../services/cloudinaryService";
 import UserSkillsModal from "../../modals/UserSkillsModal";
+import OnboardingModal from "../../modals/OnboardingModal"; // Added Import
 
 // --- NEW: Import the default avatar image ---
 import defaultAvatar from "../../assets/default_avatar2.png";
@@ -195,6 +197,9 @@ export default function LiquidGlassUserHome() {
   const [profileIsOnline, setProfileIsOnline] = useState(false);
   const [uploading, setUploading] = useState({ avatar: false, cover: false });
 
+  // NEW: Force Onboarding if setup not complete
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
   // Initial state uses defaultAvatar to prevent empty src errors
   const [profile, setProfile] = useState({
     name: "",
@@ -203,11 +208,34 @@ export default function LiquidGlassUserHome() {
     location: "",
     email: "",
     website: "",
-    githubUsername: "", // Added
-    githubToken: "", // Added
-    avatar: defaultAvatar, // FIX: Initialize with default immediately
+    githubUsername: "",
+    githubToken: "",
+    avatar: defaultAvatar,
     cover: "",
+    setupComplete: true, // Default to true to prevent flash, checked in fetch
   });
+
+  // NEW: Track original profile data for unsaved changes detection
+  const [initialProfile, setInitialProfile] = useState(null);
+
+  // NEW: Warn user about unsaved changes on page reload/close
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      // Check if profile matches initialProfile
+      // We only check if initialProfile exists to avoid false positives during loading
+      if (
+        initialProfile &&
+        JSON.stringify(profile) !== JSON.stringify(initialProfile)
+      ) {
+        e.preventDefault();
+        e.returnValue =
+          "You have unsaved changes. Are you sure you want to leave?";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [profile, initialProfile]);
 
   // Replaced manual skills state with project-derived state
   const [projects, setProjects] = useState([]);
@@ -315,7 +343,8 @@ export default function LiquidGlassUserHome() {
     if (loading) return;
 
     // Get username AND token from the profile state
-    const username = profile.githubUsername || "NiviruInsithaUdavinWeerasinghe";
+    // FIX: Removed hardcoded username. Only fetch if dynamic username exists.
+    const username = profile.githubUsername;
     const userToken = profile.githubToken;
 
     if (username) {
@@ -505,13 +534,15 @@ export default function LiquidGlassUserHome() {
 
   const applyProfileData = (data) => {
     console.group("🔍 [DEBUG] applyProfileData Execution");
-    console.log("📥 Raw Data from DB:", data);
-    console.log("👤 Current User Object:", currentUser);
+
+    // CHECK: If setup is false and I am the owner, trigger the modal
+    if (isOwner && data.setupComplete === false) {
+      console.warn("⚠️ Setup not complete. Triggering onboarding.");
+      setShowOnboarding(true);
+    }
 
     const resolvedAvatar =
       data?.photoURL || data?.avatar || currentUser?.photoURL || defaultAvatar;
-
-    console.log("🖼️ Resolved Avatar URL:", resolvedAvatar);
 
     const newProfileData = {
       name:
@@ -521,22 +552,22 @@ export default function LiquidGlassUserHome() {
       location: data?.location || "",
       email: data?.email || currentUser?.email || "",
       website: data?.website || "",
-      // --- ADDED THESE TWO LINES ---
       githubUsername: data?.githubUsername || "",
       githubToken: data?.githubToken || "",
-      // -----------------------------
-      avatar:
-        data?.photoURL ||
-        data?.avatar ||
-        currentUser?.photoURL ||
-        defaultAvatar, // CHANGED: Uses the imported Chibi image
+      avatar: resolvedAvatar,
       cover:
         data?.coverImage ||
         data?.cover ||
         "https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?auto=format&fit=crop&q=80&w=2000",
+      setupComplete: data?.setupComplete || false,
     };
 
-    setProfile((prev) => ({ ...prev, ...newProfileData }));
+    // Set both profile and initialProfile to the fetched data
+    setProfile((prev) => {
+      const updated = { ...prev, ...newProfileData };
+      setInitialProfile(updated); // Sync initial state
+      return updated;
+    });
   };
 
   // -- Handlers --
@@ -553,15 +584,9 @@ export default function LiquidGlassUserHome() {
       setUploading((prev) => ({ ...prev, [type]: true }));
       const uploadedData = await uploadFileToCloudinary(file);
 
-      // Update local state
+      // Update local state only. The URL will be saved to Firestore when 'handleSaveProfile' is called.
       const url = uploadedData.url;
       setProfile((prev) => ({ ...prev, [type]: url }));
-
-      // Update Firestore
-      if (currentUser) {
-        const fieldName = type === "avatar" ? "photoURL" : "coverImage";
-        await updateUserProfile(currentUser.uid, { [fieldName]: url });
-      }
     } catch (error) {
       alert(`Failed to upload ${type}`);
     } finally {
@@ -573,6 +598,7 @@ export default function LiquidGlassUserHome() {
     if (!currentUser?.uid) return;
     try {
       await updateUserProfile(currentUser.uid, profile);
+      setInitialProfile(profile); // Update the baseline to the current saved state
       setNotification({
         type: "success",
         message: "Profile updated successfully!",
@@ -664,6 +690,20 @@ export default function LiquidGlassUserHome() {
           {effectiveEditMode && <QuickActions />}
         </div>
       </div>
+
+      {/* Onboarding Logic for Reloads - Portal used to break out of layout stacking contexts */}
+      {showOnboarding &&
+        isOwner &&
+        createPortal(
+          <OnboardingModal
+            user={currentUser}
+            onComplete={() => {
+              setShowOnboarding(false);
+              loadUserDataWithRetry(); // Reload data after completion
+            }}
+          />,
+          document.body
+        )}
     </div>
   );
 }
@@ -700,7 +740,7 @@ const WelcomeHeader = ({
         {/* Status Indicator */}
         <div
           className={`flex items-center gap-2 mb-1 ${
-            isOnline ? "text-orange-500" : "text-red-500"
+            isOnline ? "text-green-500" : "text-red-500"
           }`}
         >
           {isOnline ? <Wifi size={16} /> : <WifiOff size={16} />}
@@ -930,10 +970,12 @@ const IdentityCard = ({
               onChange={(val) => onChange("location", val)}
               placeholder="Location"
             />
+            {/* Updated: Enabled edit mode and added onChange handler for Email */}
             <InfoItem
               icon={<Mail size={16} />}
               text={profile.email}
-              isEditMode={false} // Email usually stays static
+              isEditMode={isEditMode}
+              onChange={(val) => onChange("email", val)}
               placeholder="Email"
             />
             <InfoItem

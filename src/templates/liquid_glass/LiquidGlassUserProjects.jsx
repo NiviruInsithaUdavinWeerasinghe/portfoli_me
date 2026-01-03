@@ -34,6 +34,7 @@ export default function LiquidGlassUserProjects() {
   const { currentUser } = useAuth();
   const { username } = useParams(); // Get UID
 
+  // Identify who owns the profile we are viewing
   const targetUid = username || currentUser?.uid;
   const isOwner = currentUser?.uid === targetUid;
   const effectiveEditMode = isOwner && isEditMode;
@@ -41,34 +42,24 @@ export default function LiquidGlassUserProjects() {
   // Highlighting Logic
   const location = useLocation();
   const [highlightedId, setHighlightedId] = useState(null);
-  // NEW: State for highlighting the Add Button
   const [highlightAddBtn, setHighlightAddBtn] = useState(false);
 
   useEffect(() => {
-    // 1. Existing Project Highlight Logic
     if (location.state?.highlightProjectId) {
       const id = location.state.highlightProjectId;
       setHighlightedId(id);
-
       const timer = setTimeout(() => {
         setHighlightedId(null);
         window.history.replaceState({}, document.title);
       }, 10000);
       return () => clearTimeout(timer);
     }
-
-    // 2. NEW: Add Button Highlight Logic
     if (location.state?.highlightAddButton) {
-      console.log("✨ [DEBUG] Highlighting 'Add Project' Button");
       setHighlightAddBtn(true);
-
-      // Remove highlight after animation
       const timer = setTimeout(() => {
         setHighlightAddBtn(false);
-        // Clear state so refresh doesn't trigger it again
         window.history.replaceState({}, document.title);
       }, 3000);
-
       return () => clearTimeout(timer);
     }
   }, [location]);
@@ -85,26 +76,21 @@ export default function LiquidGlassUserProjects() {
   const [showAddEditModal, setShowAddEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showCommentModal, setShowCommentModal] = useState(false);
-  const [selectedProject, setSelectedProject] = useState(null); // For View or Edit
+  const [selectedProject, setSelectedProject] = useState(null);
   const [selectedProjectForComments, setSelectedProjectForComments] =
     useState(null);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState(null);
 
-  // Define fetchProjects with useCallback
   const fetchProjects = useCallback(async () => {
-    if (!targetUid) return; // Check targetUid
+    if (!targetUid) return;
     try {
       setLoading(true);
-      const data = await getUserProjects(targetUid); // Use targetUid
+      const data = await getUserProjects(targetUid);
 
-      // Fetch comment counts for each project
       const projectsWithCounts = await Promise.all(
         data.map(async (project) => {
-          const comments = await getProjectComments(
-            targetUid, // Use targetUid
-            project.id
-          );
+          const comments = await getProjectComments(targetUid, project.id);
           return { ...project, commentsCount: comments.length };
         })
       );
@@ -115,15 +101,13 @@ export default function LiquidGlassUserProjects() {
     } finally {
       setLoading(false);
     }
-  }, [targetUid]); // FIXED: Added targetUid dependency
+  }, [targetUid]);
 
-  // Fetch Projects from Firestore
   useEffect(() => {
     fetchProjects();
   }, [fetchProjects]);
 
   // --- Handlers ---
-
   const handleOpenAdd = () => {
     setSelectedProject(null);
     setShowAddEditModal(true);
@@ -175,12 +159,10 @@ export default function LiquidGlassUserProjects() {
     }
   };
 
-  // --- Likes & Comments ---
   const handleLike = async (e, project) => {
     e.stopPropagation();
-    if (!currentUser) return; // Prevent if not logged in
+    if (!currentUser) return;
 
-    // Optimistic UI Update
     const isLiked = project.likedBy?.includes(currentUser.uid);
     const newLikesCount = (project.appreciation || 0) + (isLiked ? -1 : 1);
     const newLikedBy = isLiked
@@ -196,12 +178,11 @@ export default function LiquidGlassUserProjects() {
     );
 
     try {
-      // Assuming owner is currentUser for this dashboard view, or handle differently for public view
-      // For dashboard, ownerId is currentUser.uid
-      await toggleProjectLike(currentUser.uid, project.id, currentUser.uid);
+      // NOTE: targetUid is the owner of the project collection
+      await toggleProjectLike(targetUid, project.id, currentUser.uid);
     } catch (error) {
       console.error("Failed to toggle like", error);
-      fetchProjects(); // Revert on error
+      fetchProjects();
     }
   };
 
@@ -211,7 +192,6 @@ export default function LiquidGlassUserProjects() {
     setShowCommentModal(true);
   };
 
-  // --- Filtering ---
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
       const matchesSearch =
@@ -383,11 +363,15 @@ export default function LiquidGlassUserProjects() {
         onSave={handleSaveProject}
       />
 
-      {/* New Comment Modal */}
+      {/* FIX: Pass targetUid as ownerId to ensure correct DB path */}
       <ProjectCommentModal
         isOpen={showCommentModal}
         onClose={() => setShowCommentModal(false)}
-        project={selectedProjectForComments}
+        project={
+          selectedProjectForComments
+            ? { ...selectedProjectForComments, ownerId: targetUid }
+            : null
+        }
         currentUser={currentUser}
       />
 
@@ -423,8 +407,7 @@ export default function LiquidGlassUserProjects() {
   );
 }
 
-// --- Sub-Components ---
-
+// --- Sub-Components (Unchanged, included for completeness if needed) ---
 const ProjectGridCard = ({
   project,
   isEditMode,
@@ -441,20 +424,16 @@ const ProjectGridCard = ({
   const CHAR_LIMIT = 12;
   const isLiked = project.likedBy?.includes(currentUser?.uid);
 
-  // NEW: Date formatting logic
   const getFormattedDate = () => {
     if (!project.startDate) return null;
-
     const options = { year: "numeric", month: "short" };
     const start = new Date(project.startDate).toLocaleDateString(
       "en-US",
       options
     );
-
     const end = project.endDate
       ? new Date(project.endDate).toLocaleDateString("en-US", options)
       : "Present";
-
     return `${start} - ${end}`;
   };
 
@@ -488,7 +467,6 @@ const ProjectGridCard = ({
             {project.status}
           </span>
         </div>
-        {/* FIXED: Changed effectiveEditMode to isEditMode */}
         {isEditMode && (
           <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
@@ -507,7 +485,6 @@ const ProjectGridCard = ({
         )}
       </div>
       <div className="p-6 flex flex-col flex-grow">
-        {/* Updated Date Display */}
         {dateString && (
           <div className="flex items-center gap-2 mb-3 text-xs text-gray-500 font-medium">
             <Calendar size={14} /> {dateString}
@@ -545,7 +522,6 @@ const ProjectGridCard = ({
           </div>
 
           <div className="flex items-center justify-between">
-            {/* Likes & Comments - Bottom Left */}
             <div className="flex items-center gap-3">
               <button
                 onClick={onLike}
@@ -561,7 +537,6 @@ const ProjectGridCard = ({
               </button>
               <button
                 onClick={onComment}
-                disabled={!currentUser}
                 className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-white transition-colors"
               >
                 <MessageSquare size={16} />
@@ -569,7 +544,6 @@ const ProjectGridCard = ({
               </button>
             </div>
 
-            {/* Links - Bottom Right */}
             <div className="flex items-center gap-3">
               {project.githubLink && (
                 <a
@@ -619,20 +593,16 @@ const ProjectListCard = ({
   const CHAR_LIMIT = 15;
   const isLiked = project.likedBy?.includes(currentUser?.uid);
 
-  // NEW: Date formatting logic
   const getFormattedDate = () => {
     if (!project.startDate) return null;
-
     const options = { year: "numeric", month: "short" };
     const start = new Date(project.startDate).toLocaleDateString(
       "en-US",
       options
     );
-
     const end = project.endDate
       ? new Date(project.endDate).toLocaleDateString("en-US", options)
       : "Present";
-
     return `${start} - ${end}`;
   };
 
@@ -658,7 +628,6 @@ const ProjectListCard = ({
         />
       </div>
       <div className="flex-1 p-6 flex flex-col">
-        {/* Date Display Added Here */}
         {dateString && (
           <div className="flex items-center gap-2 mb-2 text-xs text-gray-500 font-medium">
             <Calendar size={14} /> {dateString}
@@ -672,7 +641,6 @@ const ProjectListCard = ({
           >
             {project.title}
           </h3>
-          {/* FIXED: Changed effectiveEditMode to isEditMode */}
           {isEditMode && (
             <div className="flex gap-2 flex-shrink-0">
               <button
@@ -715,7 +683,6 @@ const ProjectListCard = ({
           </div>
 
           <div className="flex items-center gap-6">
-            {/* Likes & Comments */}
             <div className="flex items-center gap-3">
               <button
                 onClick={onLike}

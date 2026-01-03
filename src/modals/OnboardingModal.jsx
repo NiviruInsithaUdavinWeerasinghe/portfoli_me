@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios"; // Added for API validation
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { uploadFileToCloudinary } from "../services/cloudinaryService"; // Added Cloudinary Import
 import {
   User,
   Briefcase,
@@ -14,11 +15,13 @@ import {
   ExternalLink,
   Globe,
   Lock,
-  AlertCircle, // Added
+  AlertCircle,
+  Camera, // Added Camera Icon
 } from "lucide-react";
 
 export default function OnboardingModal({ user, onComplete }) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isImageUploading, setIsImageUploading] = useState(false); // Added for upload state
   const [error, setError] = useState(""); // New Error State
   const [formData, setFormData] = useState({
     displayName: "",
@@ -27,22 +30,64 @@ export default function OnboardingModal({ user, onComplete }) {
     githubToken: "",
     githubUsername: "",
     isPublic: true,
+    photoURL: "", // Added to track photo
   });
 
-  // Pre-fill data
+  // Pre-fill data & Restore from LocalStorage
   useEffect(() => {
-    if (user) {
+    const savedData = localStorage.getItem("onboarding_draft");
+
+    if (savedData) {
+      // Restore draft if exists
+      setFormData((prev) => ({
+        ...prev,
+        ...JSON.parse(savedData),
+        email: user?.email || prev.email, // Always ensure email matches current auth
+      }));
+    } else if (user) {
+      // Otherwise use Auth defaults
       setFormData((prev) => ({
         ...prev,
         displayName: user.displayName || "",
         email: user.email || "",
+        photoURL: user.photoURL || "", // Initialize with auth photo
       }));
     }
   }, [user]);
 
+  // New Handler for Image Upload
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      setIsImageUploading(true);
+      const uploadedData = await uploadFileToCloudinary(file);
+      setFormData((prev) => ({ ...prev, photoURL: uploadedData.url }));
+    } catch (error) {
+      console.error("Image upload failed:", error);
+      setError("Failed to upload image. Please try again.");
+    } finally {
+      setIsImageUploading(false);
+    }
+  };
+
+  // Save to LocalStorage on change & Unsaved Changes Warning
+  useEffect(() => {
+    localStorage.setItem("onboarding_draft", JSON.stringify(formData));
+
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue =
+        "You have unsaved changes. Are you sure you want to leave?";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [formData]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(""); // Clear previous errors
     setIsLoading(true);
 
     let authenticatedUsername = "";
@@ -87,9 +132,9 @@ export default function OnboardingModal({ user, onComplete }) {
           role: formData.role,
           bio: formData.bio,
           isPublic: formData.isPublic,
-          photoURL: user.photoURL,
+          photoURL: formData.photoURL || user.photoURL, // UPDATED: Use form data or fallback
           githubToken: formData.githubToken,
-          githubUsername: authenticatedUsername, // Save the REAL username from the token
+          githubUsername: authenticatedUsername,
           lastLogin: serverTimestamp(),
           updatedAt: serverTimestamp(),
           setupComplete: true,
@@ -97,6 +142,8 @@ export default function OnboardingModal({ user, onComplete }) {
         { merge: true }
       );
 
+      // Clear draft on success
+      localStorage.removeItem("onboarding_draft");
       onComplete();
     } catch (error) {
       console.error("Error saving user data:", error);
@@ -124,19 +171,43 @@ export default function OnboardingModal({ user, onComplete }) {
 
         <div className="p-8">
           <div className="flex items-center gap-4 mb-6">
-            <div className="relative">
-              <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-orange-500/30 shadow-[0_0_20px_rgba(234,88,12,0.2)]">
-                {user?.photoURL ? (
+            <div className="relative group/avatar">
+              <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-orange-500/30 shadow-[0_0_20px_rgba(234,88,12,0.2)] relative">
+                {formData.photoURL ? (
                   <img
-                    src={user.photoURL}
+                    src={formData.photoURL}
                     alt="Profile"
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full object-cover transition-opacity ${
+                      isImageUploading ? "opacity-50" : ""
+                    }`}
                   />
                 ) : (
                   <div className="w-full h-full bg-slate-800 flex items-center justify-center text-orange-500">
                     <User size={32} />
                   </div>
                 )}
+
+                {/* Loading Overlay */}
+                {isImageUploading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
+                    <Loader2
+                      size={20}
+                      className="animate-spin text-orange-500"
+                    />
+                  </div>
+                )}
+
+                {/* Upload Input Overlay */}
+                <label className="absolute inset-0 bg-black/40 opacity-0 group-hover/avatar:opacity-100 transition-opacity flex items-center justify-center cursor-pointer z-10">
+                  <Camera size={20} className="text-white drop-shadow-md" />
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    disabled={isImageUploading}
+                  />
+                </label>
               </div>
             </div>
             <div>
@@ -275,7 +346,8 @@ export default function OnboardingModal({ user, onComplete }) {
                   onChange={(e) =>
                     setFormData({ ...formData, bio: e.target.value })
                   }
-                  className="w-full bg-transparent border-none rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:outline-none focus:ring-0 resize-none"
+                  // Added 'scrollbar-hide' to the end of the className list
+                  className="w-full bg-transparent border-none rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:outline-none focus:ring-0 resize-none scrollbar-hide"
                 />
               </div>
             </div>
