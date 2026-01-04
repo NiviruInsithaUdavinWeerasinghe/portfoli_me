@@ -162,6 +162,34 @@ export const deleteProjectComment = async (
   }
 };
 
+// NEW: Update function for editing comments
+export const updateProjectComment = async (
+  projectOwnerId,
+  projectId,
+  commentId,
+  newText
+) => {
+  try {
+    const commentRef = doc(
+      db,
+      "users",
+      projectOwnerId,
+      "projects",
+      projectId,
+      "comments",
+      commentId
+    );
+    await updateDoc(commentRef, {
+      text: newText,
+      // Optional: Add an editedAt timestamp if you want to show "(edited)" later
+      editedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error("Error updating comment:", error);
+    throw error;
+  }
+};
+
 // REFACTORED: Now adds a new document with a parentId instead of updating a field.
 // This supports infinite nesting.
 export const addCommentReply = async (

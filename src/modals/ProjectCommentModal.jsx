@@ -11,11 +11,14 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowLeft,
+  Edit2, // Added Edit Icon
+  Check, // Added Check Icon for save
 } from "lucide-react";
 import {
   addProjectComment,
   deleteProjectComment,
   addCommentReply,
+  updateProjectComment, // Added update service
 } from "../services/projectService";
 import { db } from "../lib/firebase";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
@@ -34,20 +37,30 @@ const CommentNode = ({
   setReplyingTo,
   replyText,
   setReplyText,
+  // NEW PROPS FOR EDITING
+  editingCommentId,
+  setEditingCommentId,
+  editText,
+  setEditText,
+  onEditSubmit,
+  // ----------------
   onReplySubmit,
   onDeleteSubmit,
   depth = 0,
   onNavigate,
 }) => {
-  // CHANGED: Default is now false so you must click to view replies
   const [showReplies, setShowReplies] = useState(false);
-  // NEW: State to handle text expansion
   const [isExpanded, setIsExpanded] = useState(false);
 
   const isOwnerComment = comment.userId === projectOwnerId;
   const canReply = !!currentUser;
+  // User can delete if they own the comment OR they own the project
   const canDelete =
     currentUser?.uid === comment.userId || currentUser?.uid === projectOwnerId;
+  // User can ONLY edit if they own the specific comment
+  const canEdit = currentUser?.uid === comment.userId;
+
+  const isEditing = editingCommentId === comment.id;
 
   // Filter children for this node
   const children = allComments.filter((c) => c.parentId === comment.id);
@@ -95,7 +108,7 @@ const CommentNode = ({
 
           {/* Content Logic */}
           {deleteConfirmId === comment.id ? (
-            // Custom Delete Confirmation
+            /* ... Delete Confirmation UI (Same as before) ... */
             <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-3 flex items-center justify-between animate-in zoom-in-95 fade-in duration-300 ease-out">
               <div className="flex items-center gap-2 text-red-400 text-xs font-bold">
                 <AlertTriangle size={14} />
@@ -104,15 +117,39 @@ const CommentNode = ({
               <div className="flex gap-2">
                 <button
                   onClick={() => setDeleteConfirmId(null)}
-                  className="px-3 py-1 text-xs text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-all duration-200 active:scale-95"
+                  className="px-3 py-1 text-xs text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => onDeleteSubmit(comment.id)}
-                  className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-500 transition-all duration-200 shadow-lg shadow-red-900/20 active:scale-95"
+                  className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-500"
                 >
                   Confirm
+                </button>
+              </div>
+            </div>
+          ) : isEditing ? (
+            // NEW: Edit Mode Input
+            <div className="flex flex-col gap-2 w-full animate-in fade-in zoom-in-95 duration-200">
+              <textarea
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                className="w-full bg-black/40 border border-orange-500/50 rounded-xl p-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500 resize-none min-h-[80px]"
+                autoFocus
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setEditingCommentId(null)}
+                  className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <X size={16} />
+                </button>
+                <button
+                  onClick={() => onEditSubmit(comment.id)}
+                  className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold rounded-lg flex items-center gap-1 transition-colors"
+                >
+                  <Check size={14} /> Save
                 </button>
               </div>
             </div>
@@ -143,6 +180,12 @@ const CommentNode = ({
                 ) : (
                   text
                 )}
+                {/* Optional: Show edited tag if you added editedAt to firebase */}
+                {comment.editedAt && (
+                  <span className="text-[10px] text-gray-500 ml-2 italic">
+                    (edited)
+                  </span>
+                )}
               </div>
 
               {/* Dot Menu */}
@@ -171,7 +214,6 @@ const CommentNode = ({
                           onClick={() => {
                             setReplyingTo(comment.id);
                             setActiveMenuId(null);
-                            // Auto-expand replies if replying so input is visible
                             setShowReplies(true);
                           }}
                           className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-300 hover:bg-white/5 hover:text-white transition-colors duration-200 text-left active:bg-white/10"
@@ -183,6 +225,22 @@ const CommentNode = ({
                           Reply
                         </button>
                       )}
+
+                      {/* NEW: Edit Button */}
+                      {canEdit && (
+                        <button
+                          onClick={() => {
+                            setEditingCommentId(comment.id);
+                            setEditText(comment.text); // Pre-fill text
+                            setActiveMenuId(null);
+                          }}
+                          className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-300 hover:bg-white/5 hover:text-white transition-colors duration-200 text-left active:bg-white/10"
+                        >
+                          <Edit2 size={14} />
+                          Edit
+                        </button>
+                      )}
+
                       {canDelete && (
                         <button
                           onClick={() => {
@@ -269,6 +327,13 @@ const CommentNode = ({
                       setReplyingTo={setReplyingTo}
                       replyText={replyText}
                       setReplyText={setReplyText}
+                      // Pass Edit Props Down
+                      editingCommentId={editingCommentId}
+                      setEditingCommentId={setEditingCommentId}
+                      editText={editText}
+                      setEditText={setEditText}
+                      onEditSubmit={onEditSubmit}
+                      // ----------------
                       onReplySubmit={onReplySubmit}
                       onDeleteSubmit={onDeleteSubmit}
                       depth={depth + 1}
@@ -324,6 +389,10 @@ export default function ProjectCommentModal({
   const [replyText, setReplyText] = useState("");
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+
+  // NEW: State for Editing
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editText, setEditText] = useState("");
 
   const commentsEndRef = useRef(null);
   const projectOwnerId = project?.ownerId;
@@ -415,6 +484,23 @@ export default function ProjectCommentModal({
       setDeleteConfirmId(null);
     } catch (error) {
       console.error("Failed to delete comment", error);
+    }
+  };
+
+  // NEW: Handle Edit Submit
+  const handleEditSubmit = async (commentId) => {
+    if (!editText.trim() || !projectOwnerId) return;
+    try {
+      await updateProjectComment(
+        projectOwnerId,
+        project.id,
+        commentId,
+        editText
+      );
+      setEditingCommentId(null);
+      setEditText("");
+    } catch (error) {
+      console.error("Failed to edit comment", error);
     }
   };
 
@@ -548,8 +634,14 @@ export default function ProjectCommentModal({
                 replyText={replyText}
                 setReplyText={setReplyText}
                 onReplySubmit={handleReplySubmit}
+                // Pass Edit Props
+                editingCommentId={editingCommentId}
+                setEditingCommentId={setEditingCommentId}
+                editText={editText}
+                setEditText={setEditText}
+                onEditSubmit={handleEditSubmit}
+                // ----------------
                 onDeleteSubmit={handleDeleteSubmit}
-                // Reset depth if we are in a new page, otherwise inherit/increment
                 depth={0}
                 onNavigate={handleNavigate}
               />

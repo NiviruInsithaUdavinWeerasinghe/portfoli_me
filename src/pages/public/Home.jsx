@@ -29,6 +29,7 @@ import {
   ChevronDown,
   Search, // Added for Portfolio Search
   Mail, // Added for Google/Email
+  X, // Added for closing login prompt
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext"; // Added
@@ -45,6 +46,7 @@ function Home() {
   const [publicProfiles, setPublicProfiles] = useState([]);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [searchQuery, setSearchQuery] = useState(""); // Added state for search
+  const [loginPromptId, setLoginPromptId] = useState(null); // New state to track which card shows prompt
 
   const handleShowPortfolios = async () => {
     setActiveView("portfolios");
@@ -777,53 +779,96 @@ function Home() {
                           {profile.bio ||
                             "This user hasn't added a bio yet, but their work speaks for itself."}
                         </p>
-                        <button
-                          onClick={async () => {
-                            // 1. Unique View Logic
-                            if (
-                              currentUser?.uid &&
-                              currentUser.uid !== profile.id
-                            ) {
-                              try {
-                                // Check if this user has already viewed this profile
-                                // We use a subcollection 'uniqueViews' to track IDs to prevent duplicates
-                                const viewRef = doc(
-                                  db,
-                                  "users",
-                                  profile.id,
-                                  "uniqueViews",
-                                  currentUser.uid
-                                );
-                                const viewSnap = await getDoc(viewRef);
-
-                                // Only increment if the view record does NOT exist
-                                if (!viewSnap.exists()) {
-                                  // A. Mark this user as having viewed
-                                  await setDoc(viewRef, {
-                                    timestamp: new Date(),
-                                    viewerId: currentUser.uid,
-                                  });
-
-                                  // B. Increment the public counter
-                                  const userRef = doc(db, "users", profile.id);
-                                  await updateDoc(userRef, {
-                                    totalViews: increment(1),
-                                  });
-                                }
-                              } catch (err) {
-                                console.error(
-                                  "Error updating unique views:",
-                                  err
-                                );
+                        {loginPromptId === profile.id ? (
+                          <div className="w-full py-2.5 rounded-xl bg-orange-900/20 border border-orange-500/50 flex items-center justify-between px-4 animate-in fade-in zoom-in duration-300">
+                            <span className="text-xs text-orange-400 font-bold uppercase tracking-wider">
+                              Login Required
+                            </span>
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => {
+                                  // Save the intended portfolio URL before logging in
+                                  sessionStorage.setItem(
+                                    "login_redirect_to",
+                                    `/${profile.uid}/home`
+                                  );
+                                  handleNavigation("/login");
+                                }}
+                                className="text-xs font-bold text-white hover:underline decoration-orange-500 underline-offset-4"
+                              >
+                                LOGIN
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLoginPromptId(null);
+                                }}
+                                className="text-gray-500 hover:text-white transition-colors"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              // NEW CHECK: If not logged in, show custom prompt
+                              if (!currentUser) {
+                                setLoginPromptId(profile.id);
+                                return;
                               }
-                            }
-                            // 2. Open Portfolio
-                            window.open(`/${profile.uid}/home`, "_blank");
-                          }}
-                          className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-orange-600 hover:border-orange-600 text-white font-medium transition-all flex items-center justify-center gap-2 group-hover:shadow-[0_0_15px_rgba(234,88,12,0.3)]"
-                        >
-                          Open Portfolio <ArrowRight size={16} />
-                        </button>
+
+                              // 1. Unique View Logic
+                              if (
+                                currentUser?.uid &&
+                                currentUser.uid !== profile.id
+                              ) {
+                                try {
+                                  // Check if this user has already viewed this profile
+                                  // We use a subcollection 'uniqueViews' to track IDs to prevent duplicates
+                                  const viewRef = doc(
+                                    db,
+                                    "users",
+                                    profile.id,
+                                    "uniqueViews",
+                                    currentUser.uid
+                                  );
+                                  const viewSnap = await getDoc(viewRef);
+
+                                  // Only increment if the view record does NOT exist
+                                  if (!viewSnap.exists()) {
+                                    // A. Mark this user as having viewed
+                                    await setDoc(viewRef, {
+                                      timestamp: new Date(),
+                                      viewerId: currentUser.uid,
+                                    });
+
+                                    // B. Increment the public counter
+                                    const userRef = doc(
+                                      db,
+                                      "users",
+                                      profile.id
+                                    );
+                                    await updateDoc(userRef, {
+                                      totalViews: increment(1),
+                                    });
+                                  }
+                                } catch (err) {
+                                  console.error(
+                                    "Error updating unique views:",
+                                    err
+                                  );
+                                }
+                              }
+                              // 2. Open Portfolio
+                              window.open(`/${profile.uid}/home`, "_blank");
+                            }}
+                            // UPDATED: Added animate-in classes here for smooth revert
+                            className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-orange-600 hover:border-orange-600 text-white font-medium transition-all flex items-center justify-center gap-2 group-hover:shadow-[0_0_15px_rgba(234,88,12,0.3)] animate-in fade-in zoom-in duration-300"
+                          >
+                            Open Portfolio <ArrowRight size={16} />
+                          </button>
+                        )}
                       </div>
                     ))
                 ) : (

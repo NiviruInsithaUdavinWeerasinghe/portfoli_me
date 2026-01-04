@@ -41,7 +41,13 @@ export default function Register() {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
-        navigate("/demo_user/home");
+        const redirectPath = sessionStorage.getItem("login_redirect_to");
+        if (redirectPath) {
+          sessionStorage.removeItem("login_redirect_to");
+          navigate(redirectPath);
+        } else {
+          navigate(`/${user.uid}/home`);
+        }
       } else {
         setShowOnboarding(true);
       }
@@ -114,7 +120,13 @@ export default function Register() {
 
   const handleOnboardingComplete = () => {
     setShowOnboarding(false);
-    navigate("/demo_user/home");
+    const redirectPath = sessionStorage.getItem("login_redirect_to");
+    if (redirectPath) {
+      sessionStorage.removeItem("login_redirect_to");
+      navigate(redirectPath);
+    } else if (currentUser?.uid) {
+      navigate(`/${currentUser.uid}/home`);
+    }
   };
 
   const handleHomeNavigation = () => {

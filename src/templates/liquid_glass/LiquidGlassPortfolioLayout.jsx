@@ -35,7 +35,18 @@ const LiquidGlassPortfolioLayout = () => {
 
   // States
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
+
+  // UPDATED: Initialize state from localStorage to persist across reloads
+  const [isEditMode, setIsEditMode] = useState(() => {
+    const savedMode = localStorage.getItem("isEditMode");
+    return savedMode === "true";
+  });
+
+  // UPDATED: Save to localStorage whenever isEditMode changes
+  useEffect(() => {
+    localStorage.setItem("isEditMode", isEditMode);
+  }, [isEditMode]);
+
   const [scrolled, setScrolled] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);

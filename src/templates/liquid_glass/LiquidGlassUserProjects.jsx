@@ -18,13 +18,13 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import {
-  getUserProjects,
   addProject,
   updateProject,
   deleteProject,
   toggleProjectLike,
-  getProjectComments,
 } from "../../services/projectService";
+import { db } from "../../lib/firebase";
+import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import AddEditProjectModal from "../../modals/AddEditProjectModal";
 import ProjectViewModal from "../../modals/ProjectViewModal";
 import ProjectCommentModal from "../../modals/ProjectCommentModal";
@@ -65,6 +65,7 @@ export default function LiquidGlassUserProjects() {
   }, [location]);
 
   const [projects, setProjects] = useState([]);
+  const [commentCounts, setCommentCounts] = useState({}); // New state for live comment counts
   const [loading, setLoading] = useState(true);
 
   // UI State
@@ -82,30 +83,60 @@ export default function LiquidGlassUserProjects() {
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState(null);
 
-  const fetchProjects = useCallback(async () => {
+  // 1. Live Projects Listener (Handles Projects + Appreciation/Likes)
+  useEffect(() => {
     if (!targetUid) return;
-    try {
-      setLoading(true);
-      const data = await getUserProjects(targetUid);
+    setLoading(true);
 
-      const projectsWithCounts = await Promise.all(
-        data.map(async (project) => {
-          const comments = await getProjectComments(targetUid, project.id);
-          return { ...project, commentsCount: comments.length };
-        })
-      );
+    const projectsRef = collection(db, "users", targetUid, "projects");
+    // Assuming createdAt is available, otherwise remove orderBy
+    const q = query(projectsRef, orderBy("createdAt", "desc"));
 
-      setProjects(projectsWithCounts);
-    } catch (error) {
-      console.error("Failed to load projects", error);
-    } finally {
-      setLoading(false);
-    }
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const liveProjects = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setProjects(liveProjects);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error listening to projects:", error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, [targetUid]);
 
+  // 2. Live Comments Listener (Handles Comment Counts)
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    const unsubscribers = [];
+
+    projects.forEach((project) => {
+      const commentsRef = collection(
+        db,
+        "users",
+        targetUid,
+        "projects",
+        project.id,
+        "comments"
+      );
+
+      const unsubscribe = onSnapshot(commentsRef, (snapshot) => {
+        setCommentCounts((prev) => ({
+          ...prev,
+          [project.id]: snapshot.size, // Real-time count
+        }));
+      });
+
+      unsubscribers.push(unsubscribe);
+    });
+
+    return () => unsubscribers.forEach((unsub) => unsub());
+  }, [projects, targetUid]);
 
   // --- Handlers ---
   const handleOpenAdd = () => {
@@ -137,7 +168,7 @@ export default function LiquidGlassUserProjects() {
         await addProject(currentUser.uid, formData);
       }
       setShowAddEditModal(false);
-      fetchProjects();
+      // No fetchProjects needed; onSnapshot updates automatically
     } catch (error) {
       alert("Failed to save project.");
     }
@@ -163,26 +194,11 @@ export default function LiquidGlassUserProjects() {
     e.stopPropagation();
     if (!currentUser) return;
 
-    const isLiked = project.likedBy?.includes(currentUser.uid);
-    const newLikesCount = (project.appreciation || 0) + (isLiked ? -1 : 1);
-    const newLikedBy = isLiked
-      ? project.likedBy.filter((id) => id !== currentUser.uid)
-      : [...(project.likedBy || []), currentUser.uid];
-
-    setProjects((prev) =>
-      prev.map((p) =>
-        p.id === project.id
-          ? { ...p, appreciation: newLikesCount, likedBy: newLikedBy }
-          : p
-      )
-    );
-
     try {
-      // NOTE: targetUid is the owner of the project collection
+      // Just call the service. The onSnapshot listener will update the UI.
       await toggleProjectLike(targetUid, project.id, currentUser.uid);
     } catch (error) {
       console.error("Failed to toggle like", error);
-      fetchProjects();
     }
   };
 
@@ -193,17 +209,22 @@ export default function LiquidGlassUserProjects() {
   };
 
   const filteredProjects = useMemo(() => {
-    return projects.filter((project) => {
-      const matchesSearch =
-        project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        project.tags.some((tag) =>
-          tag.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-      const matchesStatus =
-        filterStatus === "All" || project.status === filterStatus;
-      return matchesSearch && matchesStatus;
-    });
-  }, [projects, searchQuery, filterStatus]);
+    return projects
+      .map((p) => ({
+        ...p,
+        commentsCount: commentCounts[p.id] || 0, // Inject live count
+      }))
+      .filter((project) => {
+        const matchesSearch =
+          project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          project.tags.some((tag) =>
+            tag.toLowerCase().includes(searchQuery.toLowerCase())
+          );
+        const matchesStatus =
+          filterStatus === "All" || project.status === filterStatus;
+        return matchesSearch && matchesStatus;
+      });
+  }, [projects, searchQuery, filterStatus, commentCounts]);
 
   if (loading)
     return (

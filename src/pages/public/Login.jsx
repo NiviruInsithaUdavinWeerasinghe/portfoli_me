@@ -46,8 +46,14 @@ export default function Login() {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
-        // User exists, go straight to home
-        navigate(`/${user.uid}/home`);
+        // User exists, check for redirect or go to home
+        const redirectPath = sessionStorage.getItem("login_redirect_to");
+        if (redirectPath) {
+          sessionStorage.removeItem("login_redirect_to");
+          navigate(redirectPath);
+        } else {
+          navigate(`/${user.uid}/home`);
+        }
       } else {
         // New user, show onboarding
         setShowOnboarding(true);
@@ -75,7 +81,13 @@ export default function Login() {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
-        navigate(`/${user.uid}/home`);
+        const redirectPath = sessionStorage.getItem("login_redirect_to");
+        if (redirectPath) {
+          sessionStorage.removeItem("login_redirect_to");
+          navigate(redirectPath);
+        } else {
+          navigate(`/${user.uid}/home`);
+        }
       } else {
         setShowOnboarding(true);
       }
@@ -113,7 +125,13 @@ export default function Login() {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
-        navigate(`/${user.uid}/home`);
+        const redirectPath = sessionStorage.getItem("login_redirect_to");
+        if (redirectPath) {
+          sessionStorage.removeItem("login_redirect_to");
+          navigate(redirectPath);
+        } else {
+          navigate(`/${user.uid}/home`);
+        }
       } else {
         setShowOnboarding(true);
       }
@@ -132,7 +150,11 @@ export default function Login() {
   // Called after Modal saves data successfully
   const handleOnboardingComplete = () => {
     setShowOnboarding(false);
-    if (currentUser?.uid) {
+    const redirectPath = sessionStorage.getItem("login_redirect_to");
+    if (redirectPath) {
+      sessionStorage.removeItem("login_redirect_to");
+      navigate(redirectPath);
+    } else if (currentUser?.uid) {
       navigate(`/${currentUser.uid}/home`);
     }
   };
@@ -187,7 +209,13 @@ export default function Login() {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
-        navigate(`/${user.uid}/home`);
+        const redirectPath = sessionStorage.getItem("login_redirect_to");
+        if (redirectPath) {
+          sessionStorage.removeItem("login_redirect_to");
+          navigate(redirectPath);
+        } else {
+          navigate(`/${user.uid}/home`);
+        }
       } else {
         // Logged in but no profile data -> Onboarding
         setShowOnboarding(true);
