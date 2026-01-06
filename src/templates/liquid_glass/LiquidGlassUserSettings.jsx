@@ -314,7 +314,7 @@ export default function LiquidGlassUserSettings() {
 
       <div className="flex flex-col lg:flex-row gap-8 items-start relative">
         {/* OVERLAY: COMING SOON - COVERS ENTIRE SETTINGS PAGE */}
-        <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[3px] z-50 flex items-center justify-center rounded-3xl">
+        <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[3px] z-50 flex items-center justify-center rounded-xl">
           <span className="text-xl font-bold text-orange-400 bg-orange-400/10 px-8 py-4 rounded-full border border-orange-400/20 uppercase tracking-widest shadow-2xl">
             Coming Soon
           </span>

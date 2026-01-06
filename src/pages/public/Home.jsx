@@ -30,6 +30,7 @@ import {
   Search, // Added for Portfolio Search
   Mail, // Added for Google/Email
   X, // Added for closing login prompt
+  Menu, // Added for Mobile Header
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext"; // Added
@@ -38,6 +39,7 @@ function Home() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth(); // Get auth state
   const [isDropdownOpen, setIsDropdownOpen] = useState(false); // Dropdown state
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // Mobile Menu state
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -192,72 +194,87 @@ function Home() {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-blue-900/10 rounded-full blur-[120px] pointer-events-none z-0" />
 
         {/* --- FLOATING HEADER --- */}
-        <div className="fixed top-6 left-0 right-0 flex justify-center z-50 px-4">
-          <nav className="flex items-center justify-between w-full max-w-5xl bg-[#0B1120]/80 backdrop-blur-md border border-white/10 rounded-full px-6 py-3 shadow-2xl">
+        <header className="fixed top-0 left-0 right-0 z-50 px-4 py-4">
+          <nav className="max-w-7xl mx-auto h-20 bg-[#0B1120]/80 backdrop-blur-md border border-white/10 rounded-2xl px-6 shadow-2xl flex items-center justify-between">
             <div
-              className="text-xl font-bold tracking-tighter cursor-pointer flex items-center gap-2"
+              className="text-xl font-bold tracking-tighter cursor-pointer flex items-center gap-3"
               onClick={() => navigate("/")}
             >
-              <div className="w-8 h-8 bg-amber-600 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-orange-900/20">
+              <div className="w-10 h-10 bg-amber-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-orange-900/20">
                 P
               </div>
               <span className="text-gray-200">
                 Portfoli<span className="text-amber-500">Me</span>
               </span>
             </div>
-            <div className="hidden md:flex items-center gap-2 text-sm font-medium text-gray-400">
+
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex items-center gap-1 p-1.5 bg-black/20 border border-white/5 rounded-full backdrop-blur-sm shadow-inner">
               <button
                 onClick={() => setActiveView("home")}
-                className={`px-5 py-2 rounded-full transition-all ${
+                className={`px-6 py-2 rounded-full text-sm font-bold transition-all duration-300 relative overflow-hidden ${
                   activeView === "home"
-                    ? "bg-white/10 text-white"
-                    : "hover:bg-white/10 hover:text-white"
+                    ? "text-white bg-gradient-to-r from-orange-500/10 to-amber-500/10 shadow-[0_0_20px_-5px_rgba(249,115,22,0.3)] ring-1 ring-orange-500/20"
+                    : "text-gray-500 hover:text-gray-200 hover:bg-white/5"
                 }`}
               >
                 Home
               </button>
               <button
                 onClick={handleShowPortfolios}
-                className={`px-5 py-2 rounded-full transition-all ${
+                className={`px-6 py-2 rounded-full text-sm font-bold transition-all duration-300 relative overflow-hidden ${
                   activeView === "portfolios"
-                    ? "bg-white/10 text-white"
-                    : "hover:bg-white/10 hover:text-white"
+                    ? "text-white bg-gradient-to-r from-orange-500/10 to-amber-500/10 shadow-[0_0_20px_-5px_rgba(249,115,22,0.3)] ring-1 ring-orange-500/20"
+                    : "text-gray-500 hover:text-gray-200 hover:bg-white/5"
                 }`}
               >
                 Portfolios
               </button>
-              <button className="px-5 py-2 rounded-full hover:bg-white/10 hover:text-white transition-all">
+              <button className="px-6 py-2 rounded-full text-sm font-bold text-gray-500 hover:text-gray-200 hover:bg-white/5 transition-all duration-300 relative group opacity-60 hover:opacity-100 cursor-not-allowed">
                 Templates
+                <span className="absolute top-2 right-2 flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-orange-500"></span>
+                </span>
               </button>
             </div>
+
+            {/* Right Side Actions */}
             <div className="flex items-center gap-4 text-sm font-medium relative">
               {currentUser ? (
                 /* --- LOGGED IN: PROFILE DROPDOWN --- */
                 <div className="relative">
-                  <button
-                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                    className="flex items-center gap-2 bg-white/5 border border-white/10 pr-3 pl-2 py-1.5 rounded-full hover:bg-white/10 transition-all group"
-                  >
-                    {/* Check if user has a photoURL, otherwise fallback to Initials */}
-                    {currentUser.photoURL ? (
-                      <img
-                        src={currentUser.photoURL}
-                        alt="Profile"
-                        className="w-8 h-8 rounded-full border border-white/10 shadow-lg object-cover"
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                      className="flex items-center gap-2 bg-white/5 border border-white/10 pr-3 pl-2 py-1.5 rounded-full hover:bg-white/10 transition-all group"
+                    >
+                      {currentUser.photoURL ? (
+                        <img
+                          src={currentUser.photoURL}
+                          alt="Profile"
+                          className="w-8 h-8 rounded-full border border-white/10 shadow-lg object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-orange-500 to-amber-600 flex items-center justify-center text-white font-bold shadow-lg">
+                          {currentUser.email?.charAt(0).toUpperCase() || "U"}
+                        </div>
+                      )}
+                      <ChevronDown
+                        size={16}
+                        className={`text-gray-400 group-hover:text-white transition-transform duration-300 ${
+                          isDropdownOpen ? "rotate-180" : ""
+                        }`}
                       />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-orange-500 to-amber-600 flex items-center justify-center text-white font-bold shadow-lg">
-                        {currentUser.email?.charAt(0).toUpperCase() || "U"}
-                      </div>
-                    )}
-
-                    <ChevronDown
-                      size={16}
-                      className={`text-gray-400 group-hover:text-white transition-transform duration-300 ${
-                        isDropdownOpen ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
+                    </button>
+                    {/* Mobile Menu Trigger */}
+                    <button
+                      className="md:hidden text-white p-2 rounded-lg bg-white/5 border border-white/10"
+                      onClick={() => setIsMobileMenuOpen(true)}
+                    >
+                      <Menu size={20} />
+                    </button>
+                  </div>
 
                   {/* Dropdown Menu */}
                   {isDropdownOpen && (
@@ -369,7 +386,7 @@ function Home() {
                 </div>
               ) : (
                 /* --- LOGGED OUT: LOGIN BUTTONS --- */
-                <>
+                <div className="flex items-center gap-3">
                   <button
                     onClick={() => handleNavigation("/login")}
                     className="text-gray-400 hover:text-white transition-colors hidden sm:block"
@@ -378,15 +395,98 @@ function Home() {
                   </button>
                   <button
                     onClick={() => handleNavigation("/register")}
-                    className="bg-amber-600 text-white px-5 py-2 rounded-full hover:bg-orange-500 transition-all hover:shadow-[0_0_20px_rgba(234,88,12,0.3)] active:scale-95"
+                    className="bg-amber-600 text-white px-5 py-2 rounded-full hover:bg-orange-500 transition-all hover:shadow-[0_0_20px_rgba(234,88,12,0.3)] active:scale-95 hidden sm:block"
                   >
                     Get Started
                   </button>
-                </>
+                  {/* Mobile Menu Trigger */}
+                  <button
+                    className="md:hidden text-white p-2 rounded-lg bg-white/5 border border-white/10"
+                    onClick={() => setIsMobileMenuOpen(true)}
+                  >
+                    <Menu size={20} />
+                  </button>
+                </div>
               )}
             </div>
           </nav>
-        </div>
+        </header>
+
+        {/* --- MOBILE MENU OVERLAY --- */}
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-[60] md:hidden">
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-md"
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+            <div className="absolute top-4 right-4 left-4 bg-[#0B1120] border border-white/10 rounded-2xl p-4 shadow-2xl animate-in slide-in-from-top-4 duration-300">
+              <div className="flex justify-between items-center mb-6">
+                <span className="font-bold text-white">Menu</span>
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-2 bg-white/5 rounded-full text-white"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <nav className="flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    setActiveView("home");
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+                    activeView === "home"
+                      ? "bg-orange-600 text-white"
+                      : "text-gray-400 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  Home
+                </button>
+                <button
+                  onClick={() => {
+                    handleShowPortfolios();
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+                    activeView === "portfolios"
+                      ? "bg-orange-600 text-white"
+                      : "text-gray-400 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  Portfolios
+                </button>
+                <button className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-gray-500 hover:bg-white/5 hover:text-white cursor-not-allowed opacity-60">
+                  Templates (Coming Soon)
+                </button>
+
+                {!currentUser && (
+                  <>
+                    <div className="h-px bg-white/5 my-2"></div>
+                    <button
+                      onClick={() => {
+                        handleNavigation("/login");
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-bold transition-all"
+                    >
+                      Login
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleNavigation("/register");
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl bg-amber-600 hover:bg-orange-500 text-white font-bold transition-all"
+                    >
+                      Get Started
+                    </button>
+                  </>
+                )}
+              </nav>
+            </div>
+          </div>
+        )}
 
         {activeView === "home" ? (
           /* --- ORIGINAL HOME CONTENT --- */

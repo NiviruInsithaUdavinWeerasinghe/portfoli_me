@@ -233,7 +233,7 @@ export default function Login() {
   };
 
   return (
-    <div className="h-screen bg-[#00030f] text-white font-sans selection:bg-orange-500 selection:text-white flex items-center justify-center overflow-hidden relative p-[80px]">
+    <div className="h-screen bg-[#00030f] text-white font-sans selection:bg-orange-500 selection:text-white flex items-center justify-center overflow-hidden relative p-4 lg:p-[80px]">
       {/* --- EXIT TRANSITION OVERLAY (Simple Fade Out) --- */}
       <div
         className={`fixed inset-0 z-[200] bg-[#020617] pointer-events-none transition-opacity duration-700 ease-in-out ${
@@ -303,7 +303,7 @@ export default function Login() {
       </button>
 
       {/* Content Container with Border */}
-      <div className="w-full max-w-[1200px] aspect-video relative flex overflow-hidden border border-orange-500/20 rounded-3xl shadow-2xl bg-[#020617]">
+      <div className="w-full max-w-[1200px] lg:aspect-video relative flex flex-col lg:flex-row overflow-hidden border border-orange-500/20 rounded-3xl shadow-2xl bg-[#020617]">
         {/* --- LEFT SIDE: IMAGE & BRANDING --- */}
         <div className="hidden lg:flex flex-col justify-between w-1/2 relative overflow-hidden bg-[#0B1120]">
           {/* Background Image with Overlay */}

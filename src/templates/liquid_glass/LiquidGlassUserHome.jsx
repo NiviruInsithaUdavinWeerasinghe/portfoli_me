@@ -770,8 +770,8 @@ const WelcomeHeader = ({
       </div>
 
       {isEditMode && (
-        <div className="flex items-center gap-3">
-          <div className="bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-lg flex items-center gap-3 animate-pulse">
+        <div className="flex items-center gap-3 flex-nowrap">
+          <div className="bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-lg flex items-center gap-3 animate-pulse whitespace-nowrap">
             <div className="w-2 h-2 bg-orange-500 rounded-full" />
             <span className="text-orange-500 text-sm font-semibold">
               Editing Enabled
@@ -779,7 +779,7 @@ const WelcomeHeader = ({
           </div>
           <button
             onClick={onSave}
-            className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors shadow-lg shadow-orange-900/20"
+            className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors shadow-lg shadow-orange-900/20 whitespace-nowrap"
           >
             <Save size={16} /> Save Changes
           </button>
@@ -1443,7 +1443,14 @@ const ActivityFeed = () => {
 // ============================================================================
 const QuickActions = () => {
   return (
-    <div className="bg-gradient-to-br from-orange-600 to-red-600 p-6 rounded-xl text-white shadow-xl shadow-orange-900/20">
+    <div className="bg-gradient-to-br from-orange-600 to-red-600 p-6 rounded-xl text-white shadow-xl shadow-orange-900/20 relative overflow-hidden">
+      {/* OVERLAY: COMING SOON */}
+      <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[2px] z-50 flex items-center justify-center">
+        <span className="text-sm font-bold text-orange-400 bg-orange-400/10 px-4 py-2 rounded-full border border-orange-400/20 uppercase tracking-widest shadow-xl">
+          Coming Soon
+        </span>
+      </div>
+
       <h3 className="font-bold text-lg mb-2">Boost your profile?</h3>
       <p className="text-orange-100 text-sm mb-4">
         Adding more projects increases visibility by 40%.

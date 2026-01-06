@@ -189,7 +189,8 @@ const LiquidGlassPortfolioLayout = () => {
             >
               P
             </div>
-            <span className="text-lg font-bold tracking-tight hidden sm:block">
+            {/* UPDATED: Removed 'hidden sm:block' so it is always visible */}
+            <span className="text-lg font-bold tracking-tight block">
               Portfoli<span className="text-orange-500">Me</span>
             </span>
           </div>
@@ -277,7 +278,8 @@ const LiquidGlassPortfolioLayout = () => {
               </button>
 
               {isNotifDropdownOpen && (
-                <div className="absolute top-full right-0 mt-4 w-80 bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[60] animate-in fade-in slide-in-from-top-2 ring-1 ring-white/5 overflow-hidden">
+                // FIXED: Changed 'right-0' to '-right-24 md:right-0' to prevent cut-off on mobile
+                <div className="absolute top-full -right-24 md:right-0 mt-4 w-80 bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[60] animate-in fade-in slide-in-from-top-2 ring-1 ring-white/5 overflow-hidden">
                   {/* OVERLAY: COMING SOON */}
                   <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[2px] z-50 flex items-center justify-center">
                     <span className="text-xs font-bold text-orange-400 bg-orange-400/10 px-3 py-1.5 rounded border border-orange-400/20 uppercase tracking-wider shadow-lg">
@@ -479,17 +481,52 @@ const LiquidGlassPortfolioLayout = () => {
                 onClick={() => setIsMobileMenuOpen(false)}
               />
 
-              {/* FIXED: Only show Settings in Mobile Menu if Owner */}
+              {/* FIXED: Only show Settings & Edit Mode in Mobile Menu if Owner */}
               {isOwner && (
-                <MobileNavItem
-                  to={`/${username}/settings`}
-                  icon={<Settings size={18} />}
-                  label="Settings"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                />
+                <>
+                  <MobileNavItem
+                    to={`/${username}/settings`}
+                    icon={<Settings size={18} />}
+                    label="Settings"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  />
+
+                  {/* --- MOBILE EDIT MODE TOGGLE --- */}
+                  <div
+                    onClick={() => setIsEditMode(!isEditMode)}
+                    className="flex items-center justify-between px-4 py-3 mt-2 rounded-xl bg-white/5 border border-white/5 cursor-pointer active:scale-95 transition-all"
+                  >
+                    <div className="flex items-baseline gap-3">
+                      <span className="text-gray-400">Mode</span>
+                      <span
+                        className={`text-xs font-black tracking-[0.15em] uppercase ${
+                          isEditMode ? "text-orange-500" : "text-gray-500"
+                        }`}
+                      >
+                        {isEditMode ? "EDITING" : "VIEWING"}
+                      </span>
+                    </div>
+
+                    {/* Switch UI */}
+                    <div
+                      className={`relative w-11 h-6 rounded-full transition-colors duration-500 ease-out border border-white/5 ${
+                        isEditMode
+                          ? "bg-orange-500/20 ring-1 ring-orange-500/50"
+                          : "bg-slate-800 ring-1 ring-white/5"
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-sm transform transition-transform duration-500 ${
+                          isEditMode ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-white/5 my-2"></div>
+                </>
               )}
 
-              <div className="h-px bg-white/5 my-2"></div>
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-red-400 hover:bg-red-500/10 w-full text-left"

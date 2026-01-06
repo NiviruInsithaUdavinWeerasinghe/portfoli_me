@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+// FIX: Added useRef to imports
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -10,11 +11,17 @@ import {
   Play,
   Download,
   Loader,
+  Maximize2, // NEW: Import Maximize icon
+  Minimize2, // NEW: Import Minimize icon
 } from "lucide-react";
 
 export default function ProjectViewModal({ project, isOpen, onClose }) {
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [isMediaLoaded, setIsMediaLoaded] = useState(false);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false); // NEW: State for lightbox
+
+  // FIX: Created a ref for the thumbnail scroll container
+  const scrollContainerRef = useRef(null);
 
   // FIX: Reset index to 0 whenever the project changes to prevent out-of-bounds errors
   useEffect(() => {
@@ -25,6 +32,20 @@ export default function ProjectViewModal({ project, isOpen, onClose }) {
   // Reset loading state when navigating between media
   useEffect(() => {
     setIsMediaLoaded(false);
+  }, [activeMediaIndex]);
+
+  // FIX: Auto-scroll the thumbnail strip when activeMediaIndex changes
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      const activeThumb = scrollContainerRef.current.children[activeMediaIndex];
+      if (activeThumb) {
+        activeThumb.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "center", // Keeps the active item centered
+        });
+      }
+    }
   }, [activeMediaIndex]);
 
   if (!isOpen || !project) return null;
@@ -114,10 +135,12 @@ export default function ProjectViewModal({ project, isOpen, onClose }) {
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-[90vw] h-[90vh] bg-[#0B1120] border border-white/10 rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden animate-in zoom-in-95 duration-300">
+      {/* FIX: Changed 'md:flex-row' to 'lg:flex-row'. This keeps tablets (md) in vertical column mode like mobile. */}
+      <div className="relative w-full max-w-[90vw] h-[90vh] bg-[#0B1120] border border-white/10 rounded-3xl shadow-2xl flex flex-col lg:flex-row overflow-hidden animate-in zoom-in-95 duration-300">
         {" "}
         {/* --- LEFT SIDE: MEDIA VIEWER --- */}
-        <div className="w-full md:w-2/3 bg-black/50 relative flex items-center justify-center overflow-hidden border-b md:border-b-0 md:border-r border-white/10 group">
+        {/* FIX: Added 'md:h-96' to increase height specifically on tablet screens */}
+        <div className="w-full lg:w-2/3 h-64 md:h-96 lg:h-full shrink-0 bg-black/50 relative flex items-center justify-center overflow-hidden border-b lg:border-b-0 lg:border-r border-white/10 group">
           {/* Loading Spinner - Shows only when media is NOT loaded and NOT a PDF */}
           {!isMediaLoaded && !isPdf(currentMedia) && (
             <div className="absolute inset-0 flex items-center justify-center z-20">
@@ -192,9 +215,31 @@ export default function ProjectViewModal({ project, isOpen, onClose }) {
             </div>
           )}
 
+          {/* FIX: Moved Close Button here and grouped with Expand Button. Removed 'opacity-0' so they are visible on mobile. */}
+          <div className="absolute top-4 right-4 z-20 flex items-center gap-3">
+            <button
+              onClick={() => setIsLightboxOpen(true)}
+              className="p-2 bg-black/50 hover:bg-orange-600 text-white rounded-full backdrop-blur-sm transition-colors"
+              title="Expand View"
+            >
+              <Maximize2 size={20} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 bg-black/50 hover:bg-red-600 text-white rounded-full backdrop-blur-sm transition-colors"
+              title="Close Modal"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
           {/* Thumbnails Indicator */}
           {mediaList.length > 1 && (
-            <div className="absolute bottom-4 flex gap-2 overflow-x-auto max-w-full px-4 z-10 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <div
+              // FIX: Attached the ref here so we can control scrolling
+              ref={scrollContainerRef}
+              className="absolute bottom-4 flex gap-2 overflow-x-auto max-w-full px-4 z-10 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+            >
               {mediaList.map((m, idx) => (
                 <button
                   key={idx}
@@ -226,19 +271,12 @@ export default function ProjectViewModal({ project, isOpen, onClose }) {
           )}
         </div>
         {/* --- RIGHT SIDE: DETAILS --- */}
-        <div className="w-full md:w-1/3 flex flex-col h-full bg-[#0B1120]">
-          {/* Header Actions */}
-          <div className="flex justify-end p-4">
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-white/10 rounded-full text-gray-400 hover:text-white transition-colors"
-            >
-              <X size={24} />
-            </button>
-          </div>
+        {/* FIX: Changed 'md:' classes to 'lg:' so tablets use flex-1 to fill remaining vertical space */}
+        <div className="w-full lg:w-1/3 flex flex-col flex-1 lg:h-full min-h-0 bg-[#0B1120]">
+          {/* FIX: Removed the separate Header Actions div with the Close button since it moved to the media section */}
 
-          {/* Content Scrollable */}
-          <div className="flex-1 overflow-y-auto px-8 pb-8 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {/* Content Scrollable - Added 'py-8' to give spacing at the top now that the close button header is gone */}
+          <div className="flex-1 overflow-y-auto px-8 py-8 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <div className="mb-6">
               <span
                 className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-4 ${
@@ -333,6 +371,83 @@ export default function ProjectViewModal({ project, isOpen, onClose }) {
           </div>
         </div>
       </div>
+      {/* NEW: Lightbox Overlay */}
+      {isLightboxOpen && (
+        <div className="fixed inset-0 z-[120] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center animate-in fade-in duration-300">
+          {/* Close Lightbox */}
+          <button
+            onClick={() => setIsLightboxOpen(false)}
+            className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-50"
+          >
+            <Minimize2 size={24} />
+          </button>
+
+          {/* Main Lightbox Content */}
+          <div className="w-full h-full flex items-center justify-center p-4 md:p-12 relative">
+            {/* Prev Button (Lightbox) */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePrev();
+              }}
+              className="absolute left-2 md:left-8 p-4 bg-black/50 hover:bg-orange-600 text-white rounded-full transition-all z-50"
+            >
+              <ChevronLeft size={32} />
+            </button>
+
+            {/* Media Display */}
+            <div className="w-full h-full flex items-center justify-center">
+              {currentMedia.type === "video" ? (
+                <video
+                  src={currentMedia.url}
+                  controls
+                  className="max-w-full max-h-full rounded-lg shadow-2xl"
+                />
+              ) : isPdf(currentMedia) ? (
+                <div className="w-full h-full bg-white rounded-lg overflow-hidden relative max-w-5xl">
+                  <embed
+                    src={currentMedia.url}
+                    type="application/pdf"
+                    className="w-full h-full"
+                  />
+                  <div className="absolute bottom-6 right-6 z-10">
+                    <a
+                      href={getDownloadUrl(currentMedia.url)}
+                      className="px-6 py-3 bg-orange-600 text-white rounded-xl flex items-center gap-2 hover:bg-orange-500 transition-colors shadow-xl font-bold"
+                    >
+                      <Download size={20} /> Download PDF
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <img
+                  src={currentMedia.url}
+                  alt="Full Screen"
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                />
+              )}
+            </div>
+
+            {/* Next Button (Lightbox) */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleNext();
+              }}
+              className="absolute right-2 md:right-8 p-4 bg-black/50 hover:bg-orange-600 text-white rounded-full transition-all z-50"
+            >
+              <ChevronRight size={32} />
+            </button>
+          </div>
+
+          {/* Caption in Lightbox */}
+          {currentMedia.caption && (
+            <div className="absolute bottom-8 px-6 py-3 bg-black/60 rounded-full text-white font-medium text-lg backdrop-blur-md">
+              {currentMedia.caption}
+            </div>
+          )}
+        </div>
+      )}
     </div>,
     document.body
   );

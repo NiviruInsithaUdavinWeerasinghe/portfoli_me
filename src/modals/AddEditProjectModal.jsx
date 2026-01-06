@@ -813,7 +813,7 @@ export default function AddEditProjectModal({
         input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active{ -webkit-background-clip: text; -webkit-text-fill-color: #ffffff; transition: background-color 5000s ease-in-out 0s; box-shadow: inset 0 0 20px 20px 23232329; }
         /* Updated selectors from [type="date"] to [type="month"] to style the month picker */
         input[type="month"] { color-scheme: dark; }
-        input[type="month"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; opacity: 0.6; transition: all 0.2s; }
+        input[type="month"]::-webkit-calendar-picker-indicator { filter: invert(0); cursor: pointer; opacity: 1; transition: all 0.2s; }
         input[type="month"]::-webkit-calendar-picker-indicator:hover { opacity: 1; filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(346deg) brightness(118%) contrast(119%); }
       `}</style>
 
@@ -926,7 +926,7 @@ export default function AddEditProjectModal({
           <form id="project-form" onSubmit={handleSubmit} className="space-y-8">
             {/* ... [MEDIA UPLOAD SECTION KEPT AS IS] ... */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <label className="text-sm font-medium text-gray-400 flex items-center gap-2">
                   Project Media & Thumbnail
                   <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-gray-300">
@@ -934,11 +934,11 @@ export default function AddEditProjectModal({
                   </span>
                 </label>
                 {!isEditingMedia && formData.media?.length > 0 && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 ml-auto">
                     <button
                       type="button"
                       onClick={handleClearMedia}
-                      className="text-xs flex items-center gap-1.5 text-red-400 hover:text-red-300 transition-colors bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-lg"
+                      className="text-xs flex items-center gap-1.5 text-red-400 hover:text-red-300 transition-colors bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-lg whitespace-nowrap"
                     >
                       <Trash2 size={12} />
                       Clear All
@@ -946,7 +946,7 @@ export default function AddEditProjectModal({
                     <button
                       type="button"
                       onClick={handleEnterEditMode}
-                      className="text-xs flex items-center gap-1.5 text-orange-500 hover:text-orange-400 transition-colors bg-orange-500/10 hover:bg-orange-500/20 px-3 py-1.5 rounded-lg"
+                      className="text-xs flex items-center gap-1.5 text-orange-500 hover:text-orange-400 transition-colors bg-orange-500/10 hover:bg-orange-500/20 px-3 py-1.5 rounded-lg whitespace-nowrap"
                     >
                       <Edit size={12} />
                       Edit Details
@@ -1178,12 +1178,12 @@ export default function AddEditProjectModal({
               </div>
               <select
                 onChange={handleRepoSelect}
-                className="w-full bg-[#020617] border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-300 focus:border-blue-500 focus:outline-none"
+                className="w-full bg-[#020617] border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-300 focus:border-blue-500 focus:outline-none max-w-full"
                 disabled={loadingRepos}
               >
                 <option value="">Select a repository to auto-fill...</option>
                 {repos.map((repo) => (
-                  <option key={repo.id} value={repo.id}>
+                  <option key={repo.id} value={repo.id} className="truncate">
                     {repo.name}
                   </option>
                 ))}
@@ -1211,10 +1211,13 @@ export default function AddEditProjectModal({
                 </label>
                 <div className="flex gap-2">
                   <div
-                    className={`relative w-1/2 bg-black/30 border rounded-xl px-4 py-3 flex items-center focus-within:border-orange-500/50 transition-all ${
+                    className={`relative w-1/2 bg-black/30 border rounded-xl px-3 py-1.5 flex flex-col justify-center focus-within:border-orange-500/50 transition-all ${
                       error ? "border-red-500/50" : "border-white/10"
                     }`}
                   >
+                    <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-0.5">
+                      Start Date
+                    </span>
                     {/* Changed type="date" to type="month" */}
                     <input
                       type="month"
@@ -1225,14 +1228,17 @@ export default function AddEditProjectModal({
                       onClick={(e) =>
                         e.target.showPicker && e.target.showPicker()
                       }
-                      className="w-full h-full bg-transparent text-sm text-white focus:outline-none cursor-pointer"
+                      className="w-full bg-transparent text-sm text-white focus:outline-none cursor-pointer h-6 p-0"
                     />
                   </div>
                   <div
-                    className={`relative w-1/2 bg-black/30 border rounded-xl px-4 py-3 flex items-center focus-within:border-orange-500/50 transition-all ${
+                    className={`relative w-1/2 bg-black/30 border rounded-xl px-3 py-1.5 flex flex-col justify-center focus-within:border-orange-500/50 transition-all ${
                       error ? "border-red-500/50" : "border-white/10"
                     }`}
                   >
+                    <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-0.5">
+                      End Date
+                    </span>
                     {/* Changed type="date" to type="month" */}
                     <input
                       type="month"
@@ -1243,7 +1249,7 @@ export default function AddEditProjectModal({
                       onClick={(e) =>
                         e.target.showPicker && e.target.showPicker()
                       }
-                      className="w-full h-full bg-transparent text-sm text-white focus:outline-none cursor-pointer"
+                      className="w-full bg-transparent text-sm text-white focus:outline-none cursor-pointer h-6 p-0"
                     />
                   </div>
                 </div>

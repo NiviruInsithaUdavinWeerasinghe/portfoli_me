@@ -236,7 +236,9 @@ export default function LiquidGlassUserProjects() {
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* --- Page Header --- */}
-      <div className="flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
+      {/* FIXED: Keep 'lg:flex-row' to stack vertically on tablets. */}
+      <div className="flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center">
+        {/* FIXED: Removed 'whitespace-nowrap' so text can wrap naturally on small mobile screens instead of being cut off */}
         <div>
           <h2 className="text-3xl font-bold text-white mb-2 tracking-tight">
             Projects
@@ -246,49 +248,54 @@ export default function LiquidGlassUserProjects() {
           </p>
         </div>
 
+        {/* FIXED: Main container uses sm:flex-row to align items horizontally sooner (on tablet/large phones) */}
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-          <div className="relative group">
-            <input
-              type="text"
-              placeholder="Search projects..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full sm:w-64 bg-gray-900/40 backdrop-blur-sm border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-orange-500/50 text-white"
-            />
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
-              size={18}
-            />
+          {/* Inner Container: Search and Toggles */}
+          <div className="flex flex-row items-center gap-3 w-full sm:w-auto">
+            <div className="relative group flex-1 sm:flex-none">
+              <input
+                type="text"
+                placeholder="Search projects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full sm:w-64 bg-gray-900/40 backdrop-blur-sm border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-orange-500/50 text-white"
+              />
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+                size={18}
+              />
+            </div>
+
+            <div className="flex items-center bg-gray-900/40 border border-white/10 rounded-xl p-1 w-fit">
+              <button
+                onClick={() => setViewMode("grid")}
+                className={`p-2 rounded-lg transition-all ${
+                  viewMode === "grid"
+                    ? "bg-orange-600 text-white"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <LayoutGrid size={18} />
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={`p-2 rounded-lg transition-all ${
+                  viewMode === "list"
+                    ? "bg-orange-600 text-white"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <ListIcon size={18} />
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center bg-gray-900/40 border border-white/10 rounded-xl p-1">
-            <button
-              onClick={() => setViewMode("grid")}
-              className={`p-2 rounded-lg transition-all ${
-                viewMode === "grid"
-                  ? "bg-orange-600 text-white"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              <LayoutGrid size={18} />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={`p-2 rounded-lg transition-all ${
-                viewMode === "list"
-                  ? "bg-orange-600 text-white"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              <ListIcon size={18} />
-            </button>
-          </div>
-
+          {/* Add Button */}
           {effectiveEditMode && (
             <button
               onClick={handleOpenAdd}
               className={`
-                flex items-center justify-center gap-2 bg-white text-black px-5 py-2.5 rounded-xl font-bold hover:bg-gray-200 transition-all duration-500 border-2
+                flex items-center justify-center gap-2 bg-white text-black px-5 py-2.5 rounded-xl font-bold hover:bg-gray-200 transition-all duration-500 border-2 w-full sm:w-auto whitespace-nowrap
                 ${
                   highlightAddBtn
                     ? "border-orange-500 shadow-[0_0_40px_rgba(249,115,22,0.6)] scale-110 z-20"
@@ -308,7 +315,8 @@ export default function LiquidGlassUserProjects() {
           <button
             key={status}
             onClick={() => setFilterStatus(status)}
-            className={`px-4 py-2 rounded-t-xl text-sm font-medium transition-colors border-b-2 ${
+            // FIXED: Added 'whitespace-nowrap' and 'flex-shrink-0' to prevent text clipping/wrapping and force horizontal scroll
+            className={`px-4 py-2 rounded-t-xl text-sm font-medium transition-colors border-b-2 whitespace-nowrap flex-shrink-0 ${
               filterStatus === status
                 ? "border-orange-500 text-orange-500 bg-orange-500/5"
                 : "border-transparent text-gray-500 hover:text-white"
@@ -327,7 +335,8 @@ export default function LiquidGlassUserProjects() {
             No projects found
           </h3>
           <p className="text-gray-500">
-            Try adjusting your filters or add a new project.
+            Try adjusting your filters
+            {effectiveEditMode ? " or add a new project." : "."}
           </p>
         </div>
       ) : (
@@ -609,9 +618,10 @@ const ProjectListCard = ({
   onLike,
   onComment,
 }) => {
-  const visibleTags = project.tags?.slice(0, 4) || [];
+  // FIXED: Adjusted tag limits for mobile safety
+  const visibleTags = project.tags?.slice(0, 3) || [];
   const remainingCount = project.tags?.length - visibleTags.length;
-  const CHAR_LIMIT = 15;
+  const CHAR_LIMIT = 8;
   const isLiked = project.likedBy?.includes(currentUser?.uid);
 
   const getFormattedDate = () => {
@@ -632,8 +642,9 @@ const ProjectListCard = ({
   return (
     <div
       onClick={onClick}
+      // FIXED: Force 'flex-row' to keep list layout on mobile. Adjusted spacing.
       className={`
-        group flex flex-col sm:flex-row backdrop-blur-md rounded-2xl overflow-hidden cursor-pointer transition-all duration-500
+        group flex flex-row backdrop-blur-md rounded-2xl overflow-hidden cursor-pointer transition-all duration-500
         ${
           isHighlighted
             ? "bg-gray-900/60 border-2 border-orange-500 shadow-[0_0_40px_rgba(249,115,22,0.4)] scale-[1.01] z-20"
@@ -641,55 +652,63 @@ const ProjectListCard = ({
         }
       `}
     >
-      <div className="sm:w-56 h-48 sm:h-auto relative flex-shrink-0">
+      {/* FIXED: Reduced image width on mobile (w-28) to give text room */}
+      <div className="w-28 sm:w-56 relative flex-shrink-0">
         <img
           src={project.image || "https://via.placeholder.com/400"}
           alt={project.title}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover absolute inset-0"
         />
       </div>
-      <div className="flex-1 p-6 flex flex-col">
-        {dateString && (
-          <div className="flex items-center gap-2 mb-2 text-xs text-gray-500 font-medium">
-            <Calendar size={14} /> {dateString}
-          </div>
-        )}
 
-        <div className="flex justify-between items-start mb-2 overflow-hidden">
-          <h3
-            title={project.title}
-            className="text-xl font-bold text-white group-hover:text-orange-500 transition-colors truncate pr-2"
-          >
-            {project.title}
-          </h3>
+      {/* FIXED: Compact padding (p-3) and optimized layout for mobile */}
+      <div className="flex-1 p-3 sm:p-5 flex flex-col gap-1.5 min-w-0">
+        {/* Header: Date & Controls */}
+        <div className="flex items-center justify-between">
+          {dateString && (
+            <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium">
+              <Calendar size={10} /> {dateString}
+            </div>
+          )}
           {isEditMode && (
-            <div className="flex gap-2 flex-shrink-0">
+            <div className="flex gap-1">
               <button
                 onClick={onEdit}
-                className="p-2 text-gray-400 hover:text-white"
+                className="p-1 text-gray-400 hover:text-white"
               >
-                <Edit2 size={16} />
+                <Edit2 size={12} />
               </button>
               <button
                 onClick={onDelete}
-                className="p-2 text-gray-400 hover:text-red-500"
+                className="p-1 text-gray-400 hover:text-red-500"
               >
-                <Trash2 size={16} />
+                <Trash2 size={12} />
               </button>
             </div>
           )}
         </div>
-        <div
-          className="text-gray-400 text-sm mb-5 line-clamp-2 break-all [&_p]:inline [&_ul]:inline [&_ol]:inline"
-          dangerouslySetInnerHTML={{ __html: project.description }}
-        />
-        <div className="mt-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2">
+
+        {/* Title */}
+        <h3
+          title={project.title}
+          className="text-sm sm:text-xl font-bold text-white leading-tight truncate group-hover:text-orange-500 transition-colors"
+        >
+          {project.title}
+        </h3>
+
+        {/* Description */}
+        <div className="text-[10px] sm:text-sm text-gray-400 line-clamp-2 leading-relaxed">
+          <div dangerouslySetInnerHTML={{ __html: project.description }} />
+        </div>
+
+        {/* Footer: Tags & Stats */}
+        <div className="mt-auto pt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          {/* Tags */}
+          <div className="flex flex-wrap items-center gap-1.5">
             {visibleTags.map((tag, i) => (
               <span
                 key={i}
-                title={tag.length > CHAR_LIMIT ? tag : ""}
-                className="px-2 py-1 text-xs bg-white/5 text-gray-400 rounded whitespace-nowrap"
+                className="px-1.5 py-0.5 text-[9px] sm:text-xs bg-white/5 text-gray-400 rounded border border-white/5 whitespace-nowrap"
               >
                 {tag.length > CHAR_LIMIT
                   ? `${tag.substring(0, CHAR_LIMIT)}...`
@@ -697,56 +716,45 @@ const ProjectListCard = ({
               </span>
             ))}
             {remainingCount > 0 && (
-              <span className="text-xs text-orange-500 font-medium whitespace-nowrap">
-                +{remainingCount} more
+              <span className="text-[9px] text-orange-500 font-medium">
+                +{remainingCount}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
+          {/* Stats & Links */}
+          <div className="flex items-center justify-between sm:justify-end gap-3 border-t border-white/5 pt-2 sm:pt-0 sm:border-0">
+            <div className="flex items-center gap-2 text-gray-500">
               <button
                 onClick={onLike}
-                disabled={!currentUser}
-                className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${
-                  isLiked
-                    ? "text-blue-500"
-                    : "text-gray-500 hover:text-blue-500"
-                }`}
+                className="flex items-center gap-1 text-[10px] sm:text-xs hover:text-blue-500"
               >
-                <ThumbsUp size={16} fill={isLiked ? "currentColor" : "none"} />
-                <span>{project.appreciation || 0}</span>
+                <ThumbsUp size={12} /> {project.appreciation || 0}
               </button>
               <button
                 onClick={onComment}
-                className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-white transition-colors"
+                className="flex items-center gap-1 text-[10px] sm:text-xs hover:text-white"
               >
-                <MessageSquare size={16} />
-                <span>{project.commentsCount || 0}</span>
+                <MessageSquare size={12} /> {project.commentsCount || 0}
               </button>
             </div>
-
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               {project.githubLink && (
                 <a
                   href={project.githubLink}
                   target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-gray-500 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-medium"
+                  className="text-gray-500 hover:text-white"
                 >
-                  <Github size={16} /> Code
+                  <Github size={14} />
                 </a>
               )}
               {project.liveLink && (
                 <a
                   href={project.liveLink}
                   target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-gray-500 hover:text-orange-500 transition-colors flex items-center gap-1.5 text-xs font-medium"
+                  className="text-gray-500 hover:text-orange-500"
                 >
-                  <ExternalLink size={16} /> Demo
+                  <ExternalLink size={14} />
                 </a>
               )}
             </div>
