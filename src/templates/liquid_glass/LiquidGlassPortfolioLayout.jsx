@@ -304,16 +304,17 @@ const LiquidGlassPortfolioLayout = () => {
                   setIsNotifDropdownOpen(false);
                 }}
               >
-                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 p-0.5 shadow-lg shadow-purple-500/20">
+                {/* MATCHED DESIGN: Orange Gradient, Black Ring, Inner Border */}
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 p-0.5 shadow-lg shadow-orange-500/20 ring-2 ring-black/40">
                   {/* UPDATED: Check dbPhotoURL first, then currentUser.photoURL */}
                   {dbPhotoURL || currentUser?.photoURL ? (
                     <img
                       src={dbPhotoURL || currentUser.photoURL}
                       alt="User"
-                      className="w-full h-full rounded-full object-cover border-2 border-black"
+                      className="w-full h-full rounded-full object-cover border-2 border-[#0B1120] bg-[#0B1120]"
                     />
                   ) : (
-                    <div className="w-full h-full rounded-full bg-[#1a202c] flex items-center justify-center text-xs font-bold text-white border-2 border-black">
+                    <div className="w-full h-full rounded-full bg-[#0B1120] flex items-center justify-center text-xs font-bold text-white border-2 border-[#0B1120]">
                       {currentUser?.email?.charAt(0).toUpperCase() || "U"}
                     </div>
                   )}

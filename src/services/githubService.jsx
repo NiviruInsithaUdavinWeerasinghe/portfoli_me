@@ -82,3 +82,23 @@ export const fetchRepoLanguages = async (url, token) => {
     return [];
   }
 };
+
+// NEW: Validate Token & Username Match
+export const validateGitHubToken = async (username, token) => {
+  try {
+    const response = await axios.get("https://api.github.com/user", {
+      headers: { Authorization: `token ${token}` },
+    });
+
+    const tokenOwner = response.data.login;
+
+    if (tokenOwner.toLowerCase() !== username.toLowerCase()) {
+      throw new Error(`Token belongs to "${tokenOwner}", not "${username}".`);
+    }
+
+    return true;
+  } catch (error) {
+    console.error("GitHub Validation Error:", error);
+    throw error;
+  }
+};
