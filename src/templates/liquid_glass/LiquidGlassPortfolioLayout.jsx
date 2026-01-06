@@ -277,7 +277,14 @@ const LiquidGlassPortfolioLayout = () => {
               </button>
 
               {isNotifDropdownOpen && (
-                <div className="absolute top-full right-0 mt-4 w-80 bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[60] animate-in fade-in slide-in-from-top-2 ring-1 ring-white/5">
+                <div className="absolute top-full right-0 mt-4 w-80 bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[60] animate-in fade-in slide-in-from-top-2 ring-1 ring-white/5 overflow-hidden">
+                  {/* OVERLAY: COMING SOON */}
+                  <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[2px] z-50 flex items-center justify-center">
+                    <span className="text-xs font-bold text-orange-400 bg-orange-400/10 px-3 py-1.5 rounded border border-orange-400/20 uppercase tracking-wider shadow-lg">
+                      Coming Soon
+                    </span>
+                  </div>
+
                   <div className="p-3 border-b border-white/5">
                     <h3 className="text-sm font-bold text-white">
                       Notifications

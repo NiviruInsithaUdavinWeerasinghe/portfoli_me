@@ -937,7 +937,14 @@ const IdentityCard = ({
             </div>
 
             {/* Social Links (Static) */}
-            <div className="flex items-center gap-3">
+            <div className="relative flex items-center gap-3">
+              {/* OVERLAY: COMING SOON */}
+              <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[2px] z-50 flex items-center justify-center rounded-lg">
+                <span className="text-[10px] font-bold text-orange-400 bg-orange-400/10 px-2 py-1 rounded border border-orange-400/20 uppercase tracking-wider">
+                  Coming Soon
+                </span>
+              </div>
+
               <SocialIcon icon={<Github size={20} />} />
               <SocialIcon icon={<Linkedin size={20} />} />
               <SocialIcon icon={<Twitter size={20} />} />
@@ -1041,7 +1048,13 @@ const StatsWidget = ({ stats }) => {
 
         <div className="h-px w-full bg-white/5"></div>
 
-        <div className="flex-1 p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+        <div className="flex-1 p-4 flex items-center justify-between hover:bg-white/5 transition-colors relative">
+          {/* OVERLAY: COMING SOON */}
+          <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[2px] z-10 flex items-center justify-center">
+            <span className="text-[10px] font-bold text-orange-400 bg-orange-400/10 px-2 py-1 rounded border border-orange-400/20 uppercase tracking-wider">
+              Coming Soon
+            </span>
+          </div>
           <div>
             <div className="text-gray-400 mb-1 group-hover:text-white transition-colors">
               <Share2 size={18} />
@@ -1141,7 +1154,13 @@ const StatsWidget = ({ stats }) => {
       </div>
 
       {/* Card 4: Inquiries (Single) */}
-      <div className="bg-[#0B1120] border border-white/5 p-5 rounded-xl flex flex-col justify-between hover:border-orange-500/20 transition-colors group">
+      <div className="bg-[#0B1120] border border-white/5 p-5 rounded-xl flex flex-col justify-between hover:border-orange-500/20 transition-colors group relative overflow-hidden">
+        {/* OVERLAY: COMING SOON */}
+        <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[2px] z-10 flex items-center justify-center">
+          <span className="text-[10px] font-bold text-orange-400 bg-orange-400/10 px-2 py-1 rounded border border-orange-400/20 uppercase tracking-wider">
+            Coming Soon
+          </span>
+        </div>
         <div className="flex justify-between items-start">
           <div className="p-2 bg-white/5 rounded-lg text-gray-400 group-hover:text-white group-hover:bg-orange-500 transition-colors">
             <Inbox size={20} />
@@ -1264,7 +1283,7 @@ const SkillsWidget = ({ skills, onSeeMore, onAddProject, isLoggedIn }) => {
 };
 
 // ============================================================================
-// SUB-COMPONENT: Analytics Card (Custom SVG Chart)
+// SUB-COMPONENT: AnalyticsCard (Custom SVG Chart)
 // ============================================================================
 const AnalyticsCard = () => {
   // Logic to normalize data for SVG
@@ -1283,6 +1302,13 @@ const AnalyticsCard = () => {
 
   return (
     <div className="bg-[#0B1120] border border-white/5 rounded-xl overflow-hidden relative min-h-[250px] flex flex-col">
+      {/* OVERLAY: COMING SOON */}
+      <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[2px] z-50 flex items-center justify-center">
+        <span className="text-sm font-bold text-orange-400 bg-orange-400/10 px-4 py-2 rounded-full border border-orange-400/20 uppercase tracking-widest shadow-xl">
+          Coming Soon
+        </span>
+      </div>
+
       <div className="p-6 relative z-10">
         <h3 className="font-bold text-white mb-1">Profile Visits</h3>
         <p className="text-xs text-gray-500 mb-4">Last 7 days performance</p>
@@ -1369,11 +1395,18 @@ const AnalyticsCard = () => {
 };
 
 // ============================================================================
-// SUB-COMPONENT: Activity Feed
+// SUB-COMPONENT: ActivityFeed
 // ============================================================================
 const ActivityFeed = () => {
   return (
-    <div className="bg-[#0B1120] border border-white/5 p-6 rounded-xl flex-1">
+    <div className="bg-[#0B1120] border border-white/5 p-6 rounded-xl flex-1 relative overflow-hidden">
+      {/* OVERLAY: COMING SOON */}
+      <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[2px] z-50 flex items-center justify-center">
+        <span className="text-sm font-bold text-orange-400 bg-orange-400/10 px-4 py-2 rounded-full border border-orange-400/20 uppercase tracking-widest shadow-xl">
+          Coming Soon
+        </span>
+      </div>
+
       <div className="flex justify-between items-center mb-6">
         <h3 className="font-bold text-white text-sm uppercase tracking-wide">
           Recent Activity
