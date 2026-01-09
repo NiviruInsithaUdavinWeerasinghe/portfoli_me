@@ -1,14 +1,20 @@
 //C:\PortfoliMe\portfoli_me\src\templates\liquid_glass\LiquidGlassUserHome.jsx
 
 import React, { useState, useEffect } from "react";
-import { createPortal } from "react-dom"; // Added for Portal
+import { createPortal } from "react-dom";
 import {
   useOutletContext,
   Link,
   useNavigate,
   useParams,
-} from "react-router-dom"; // --- NEW IMPORTS START ---
-import { collection, getDocs, onSnapshot, doc } from "firebase/firestore";
+} from "react-router-dom";
+import {
+  collection,
+  getDocs,
+  onSnapshot,
+  doc,
+  updateDoc,
+} from "firebase/firestore"; // Added updateDoc
 import { db } from "../../lib/firebase";
 // --- NEW IMPORTS END ---
 import {
@@ -156,24 +162,38 @@ const RECENT_ACTIVITY = [
 
 // --- MAIN COMPONENT ---
 export default function LiquidGlassUserHome() {
-  // UPDATED: Destructure setIsEditMode
-  const { isEditMode, setIsEditMode } = useOutletContext();
+  // UPDATED: Destructure new layout props
+  const { isEditMode, setIsEditMode, portfolioName, headerLayout } =
+    useOutletContext();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const { username } = useParams(); // Get UID from URL
+  const { username } = useParams();
 
-  // Determine Target UID (URL param takes precedence)
   const targetUid = username || currentUser?.uid;
   const isOwner = currentUser?.uid === targetUid;
 
-  // Force edit mode off if not owner
   const effectiveEditMode = isOwner && isEditMode;
+
+  // NEW: Save Header Config to Firebase
+  // Call this function when the user clicks "Save" on this page
+  const saveHeaderConfig = async () => {
+    if (!currentUser?.uid || !isOwner) return;
+    try {
+      const userRef = doc(db, "users", currentUser.uid);
+      await updateDoc(userRef, {
+        portfolioName: portfolioName,
+        headerLayout: headerLayout,
+      });
+      console.log("Header config saved");
+    } catch (err) {
+      console.error("Failed to save header config", err);
+    }
+  };
 
   // NEW: Handler for the Add Project logic
   const handleAddProjectRedirect = () => {
     console.log("🔘 [DEBUG] 'Add Project' button clicked in Overview.");
 
-    // 1. Toggle Edit Mode
     if (setIsEditMode) {
       console.log("🔄 [DEBUG] Toggling Edit Mode: ON");
       setIsEditMode(true);
@@ -601,11 +621,22 @@ export default function LiquidGlassUserHome() {
   const handleSaveProfile = async () => {
     if (!currentUser?.uid) return;
     try {
+      // 1. Save Profile Details
       await updateUserProfile(currentUser.uid, profile);
+
+      // 2. Save Header/Layout Config
+      if (isOwner) {
+        const userRef = doc(db, "users", currentUser.uid);
+        await updateDoc(userRef, {
+          portfolioName: portfolioName,
+          headerLayout: headerLayout,
+        });
+      }
+
       setInitialProfile(profile); // Update the baseline to the current saved state
       setNotification({
         type: "success",
-        message: "Profile updated successfully!",
+        message: "Profile & Layout updated successfully!",
       });
     } catch (error) {
       console.error("Error saving profile:", error);
