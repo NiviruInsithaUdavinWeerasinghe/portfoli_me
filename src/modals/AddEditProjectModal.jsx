@@ -28,6 +28,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { uploadFileToCloudinary } from "../services/cloudinaryService";
 import { fetchUserProfile } from "../services/profileOverviewService"; // ADDED THIS
+import { decryptData } from "../lib/secureStorage"; // Import Decryption
 import {
   fetchUserRepositories,
   fetchRepoLanguages,
@@ -408,7 +409,10 @@ export default function AddEditProjectModal({
         const username =
           userProfile?.githubUsername ||
           currentUser?.reloadUserInfo?.screenName;
-        const token = userProfile?.githubToken;
+        // DECRYPT TOKEN BEFORE USE
+        const token = userProfile?.githubToken
+          ? decryptData(userProfile.githubToken)
+          : "";
         setGithubToken(token);
         if (username) {
           const data = await fetchUserRepositories(username, token);

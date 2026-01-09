@@ -3,6 +3,7 @@ import axios from "axios"; // Added for API validation
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { uploadFileToCloudinary } from "../services/cloudinaryService"; // Added Cloudinary Import
+import { encryptData } from "../lib/secureStorage"; // Import Encryption
 import {
   User,
   Briefcase,
@@ -38,11 +39,14 @@ export default function OnboardingModal({ user, onComplete }) {
     const savedData = localStorage.getItem("onboarding_draft");
 
     if (savedData) {
+      const parsedData = JSON.parse(savedData);
       // Restore draft if exists
       setFormData((prev) => ({
         ...prev,
-        ...JSON.parse(savedData),
+        ...parsedData,
         email: user?.email || prev.email, // Always ensure email matches current auth
+        // FIX: If local draft has no photo but GitHub User does, use the GitHub photo
+        photoURL: parsedData.photoURL || user?.photoURL || "",
       }));
     } else if (user) {
       // Otherwise use Auth defaults
@@ -133,7 +137,7 @@ export default function OnboardingModal({ user, onComplete }) {
           bio: formData.bio,
           isPublic: formData.isPublic,
           photoURL: formData.photoURL || user.photoURL, // UPDATED: Use form data or fallback
-          githubToken: formData.githubToken,
+          githubToken: encryptData(formData.githubToken), // ENCRYPTED BEFORE SAVING
           githubUsername: authenticatedUsername,
           lastLogin: serverTimestamp(),
           updatedAt: serverTimestamp(),

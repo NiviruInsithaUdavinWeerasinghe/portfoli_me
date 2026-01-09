@@ -34,6 +34,7 @@ import {
   updateUserProfile,
   uploadProfilePicture,
 } from "../../services/settingsService";
+import { encryptData, decryptData } from "../../lib/secureStorage"; // Import Encryption
 // validateGitHubToken removed
 import { deleteField } from "firebase/firestore";
 import { linkWithPopup, unlink, GoogleAuthProvider } from "firebase/auth";
@@ -174,7 +175,9 @@ export default function LiquidGlassUserSettings() {
               bio: data.bio || "",
               photoURL: initialPhoto,
               // Map the database fields to state
-              githubToken: data.githubToken || "",
+              githubToken: data.githubToken
+                ? decryptData(data.githubToken)
+                : "", // DECRYPT ON LOAD
               githubUsername: data.githubUsername || "",
               twitterConnected: data.twitterConnected || false,
               linkedinConnected: data.linkedinConnected || false,
@@ -802,7 +805,7 @@ const IntegrationSettings = ({ formData, currentUser, onUpdate }) => {
 
       const updates = {
         githubUsername: targetUsername,
-        githubToken: githubInputs.token,
+        githubToken: encryptData(githubInputs.token), // ENCRYPT BEFORE SAVING
       };
 
       await updateUserProfile(currentUser.uid, updates);

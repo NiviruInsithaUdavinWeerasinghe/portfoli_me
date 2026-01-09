@@ -51,6 +51,7 @@ import {
 import { getUserProjects } from "../../services/projectService";
 import { fetchUserRepositories } from "../../services/githubService";
 import { uploadFileToCloudinary } from "../../services/cloudinaryService";
+import { decryptData } from "../../lib/secureStorage"; // Import Decryption
 import UserSkillsModal from "../../modals/UserSkillsModal";
 import OnboardingModal from "../../modals/OnboardingModal"; // Added Import
 
@@ -345,7 +346,10 @@ export default function LiquidGlassUserHome() {
     // Get username AND token from the profile state
     // FIX: Removed hardcoded username. Only fetch if dynamic username exists.
     const username = profile.githubUsername;
-    const userToken = profile.githubToken;
+    // DECRYPT TOKEN BEFORE USE
+    const userToken = profile.githubToken
+      ? decryptData(profile.githubToken)
+      : "";
 
     if (username) {
       const loadGithubStats = async () => {
