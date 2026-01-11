@@ -29,6 +29,10 @@ import {
   Minimize,
   ChevronLeft,
   ChevronRight,
+  Globe, // NEW
+  Lock, // NEW
+  Save, // NEW
+  AlertCircle, // NEW
 } from "lucide-react";
 
 const LiquidGlassPortfolioLayout = () => {
@@ -51,8 +55,10 @@ const LiquidGlassPortfolioLayout = () => {
   });
 
   // NEW: Customization States
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true); // NEW: Prevents flash of default header
   const [portfolioName, setPortfolioName] = useState("PortfoliMe");
   const [headerLayout, setHeaderLayout] = useState("standard"); // standard, sticky, left, right
+  const [isPublic, setIsPublic] = useState(true); // NEW: Visibility State
   const [isLayoutMenuOpen, setIsLayoutMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); // NEW: Sidebar Toggle
 
@@ -64,7 +70,10 @@ const LiquidGlassPortfolioLayout = () => {
   // NEW: Fetch Customization Settings
   useEffect(() => {
     const fetchSettings = async () => {
-      if (!username) return;
+      if (!username) {
+        setIsLoadingSettings(false);
+        return;
+      }
       try {
         const userDocRef = doc(db, "users", username);
         const userDocSnap = await getDoc(userDocRef);
@@ -72,6 +81,50 @@ const LiquidGlassPortfolioLayout = () => {
           const data = userDocSnap.data();
           if (data.portfolioName) setPortfolioName(data.portfolioName);
           if (data.headerLayout) setHeaderLayout(data.headerLayout);
+          if (data.isPublic !== undefined) setIsPublic(data.isPublic); // NEW: Load visibility
+        }
+      } catch (error) {
+        console.error("Error fetching settings:", error);
+      } finally {
+        setIsLoadingSettings(false); // NEW: Allow header to render only after data is fetched
+      }
+    };
+    fetchSettings();
+  }, [username]);
+
+  // NEW: Track Original Settings for Comparison
+  const [originalSettings, setOriginalSettings] = useState({
+    portfolioName: "PortfoliMe",
+    headerLayout: "standard",
+    isPublic: true,
+  });
+
+  // NEW: Save Animation State & Status
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(true); // true = Success, false = Error (No changes)
+
+  // UPDATED: Fetch Settings & Set Baseline
+  useEffect(() => {
+    const fetchSettings = async () => {
+      if (!username) return;
+      try {
+        const userDocRef = doc(db, "users", username);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          const data = userDocSnap.data();
+          const fetchedSettings = {
+            portfolioName: data.portfolioName || "PortfoliMe",
+            headerLayout: data.headerLayout || "standard",
+            isPublic: data.isPublic !== undefined ? data.isPublic : true,
+          };
+
+          // Apply to UI state
+          setPortfolioName(fetchedSettings.portfolioName);
+          setHeaderLayout(fetchedSettings.headerLayout);
+          setIsPublic(fetchedSettings.isPublic);
+
+          // Set Baseline for comparison
+          setOriginalSettings(fetchedSettings);
         }
       } catch (error) {
         console.error("Error fetching settings:", error);
@@ -79,6 +132,51 @@ const LiquidGlassPortfolioLayout = () => {
     };
     fetchSettings();
   }, [username]);
+
+  // NEW: Conditional Save Logic
+  const handleGlobalSave = async () => {
+    if (!currentUser?.uid || !isOwner) return;
+
+    // 1. Check for changes
+    const hasChanges =
+      portfolioName !== originalSettings.portfolioName ||
+      headerLayout !== originalSettings.headerLayout ||
+      isPublic !== originalSettings.isPublic;
+
+    // 2. Handle "No Changes" Scenario (Error Animation)
+    if (!hasChanges) {
+      setSaveSuccess(false); // Trigger Error Icon
+      setIsSaving(true);
+      setTimeout(() => setIsSaving(false), 2000);
+      return;
+    }
+
+    // 3. Handle Valid Save (Success Animation)
+    try {
+      const userRef = doc(db, "users", currentUser.uid);
+      await updateDoc(userRef, {
+        portfolioName,
+        headerLayout,
+        isPublic,
+      });
+      console.log("Global settings saved successfully");
+
+      // Update baseline to new current state
+      setOriginalSettings({ portfolioName, headerLayout, isPublic });
+
+      setSaveSuccess(true); // Trigger Success Icon
+      setIsSaving(true);
+
+      setTimeout(() => {
+        setIsSaving(false);
+      }, 2000);
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      setSaveSuccess(false); // Trigger Error Icon on API fail
+      setIsSaving(true);
+      setTimeout(() => setIsSaving(false), 2000);
+    }
+  };
 
   const [scrolled, setScrolled] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -203,447 +301,168 @@ const LiquidGlassPortfolioLayout = () => {
       <div className="fixed bottom-[-10%] right-[-10%] w-96 h-96 bg-orange-600/10 rounded-full blur-[120px] pointer-events-none z-0" />
 
       {/* --- DYNAMIC HEADER --- */}
-      <header
-        className={`fixed z-50 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]
+      {/* ONLY RENDER HEADER AFTER SETTINGS LOAD TO PREVENT FLASH */}
+      {!isLoadingSettings && (
+        <header
+          /* FIXED: key={headerLayout} forces React to unmount the old header and mount the new one 
+             instead of trying to morph the shapes, which causes the "garbage" effect. */
+          key={headerLayout}
+          className={`fixed z-50 animate-in fade-in duration-500 ease-out
           ${
             headerLayout === "left"
-              ? `top-0 left-0 h-screen ${isSidebarCollapsed ? "w-24" : "w-72"}`
+              ? /* Mobile: Standard Floating (fallback) | Desktop: Sidebar */
+                `slide-in-from-top-6 top-0 left-0 w-full h-20 px-4 py-4 md:px-8 xl:p-0 xl:slide-in-from-left-6 xl:h-screen ${
+                  isSidebarCollapsed ? "xl:w-24" : "xl:w-72"
+                }`
               : headerLayout === "bottom"
-              ? "bottom-0 left-0 w-full h-32 flex items-end justify-center pointer-events-none pb-6"
+              ? /* Add slide-in-from-bottom for dock feel */
+                "slide-in-from-bottom-6 bottom-0 left-0 w-full h-auto min-h-[5rem] flex items-end justify-center pointer-events-none pb-4 md:pb-6 px-2"
               : headerLayout === "sticky"
-              ? "top-0 left-0 w-full h-16"
-              : "top-0 left-0 w-full h-28 px-4 py-4 md:px-8"
+              ? /* Add slide-in-from-top for sticky/standard feel */
+                "slide-in-from-top-6 top-0 left-0 w-full h-16"
+              : "slide-in-from-top-6 top-0 left-0 w-full h-20 px-4 py-4 md:px-8"
           }
         `}
-      >
-        <div
-          className={`
-            border flex items-center justify-between transition-all duration-300 ease-in-out
+        >
+          <div
+            className={`
+            flex items-center justify-between transition-all duration-300 ease-in-out relative
             ${
               headerLayout === "sticky"
-                ? "w-full h-16 px-6 bg-gray-900/90 backdrop-blur-xl border-b border-white/10 rounded-none"
+                ? "w-full h-16 px-4 md:px-6 bg-gray-900/90 backdrop-blur-xl border-b border-white/10 rounded-none"
                 : headerLayout === "left"
-                ? `w-full h-full flex-col items-center justify-between py-6 bg-gray-900/90 backdrop-blur-xl border-white/10 shadow-2xl ${
-                    isSidebarCollapsed ? "px-2" : "px-4"
-                  }`
+                ? /* Mobile: Standard Floating Style | Desktop: Sidebar Style */
+                  `w-full max-w-[95%] mx-auto rounded-2xl h-16 md:h-20 px-4 md:px-6 border 
+                   xl:max-w-none xl:mx-0 xl:rounded-none xl:h-full xl:flex-col xl:items-center xl:justify-start xl:gap-8 xl:py-6 xl:bg-gray-900/90 xl:backdrop-blur-xl xl:border-b-0 xl:border-r xl:border-white/10 xl:shadow-2xl
+                   ${
+                     scrolled
+                       ? "bg-gray-900/70 backdrop-blur-xl border-white/10 shadow-2xl shadow-black/20"
+                       : "bg-gray-900/40 backdrop-blur-lg border-white/5"
+                   }
+                   ${isSidebarCollapsed ? "xl:px-2" : "xl:px-4"}`
                 : headerLayout === "bottom"
-                ? "pointer-events-auto h-20 px-8 bg-gray-900/80 backdrop-blur-xl rounded-full border-white/10 shadow-2xl shadow-black/50 gap-8"
-                : `max-w-[95%] mx-auto rounded-2xl h-20 px-6 ${
+                ? "pointer-events-auto w-[95%] md:w-[92%] xl:w-auto xl:min-w-fit max-w-[95vw] xl:max-w-7xl h-16 md:h-20 px-6 md:px-12 bg-gray-900/80 backdrop-blur-xl rounded-2xl md:rounded-full border border-white/10 shadow-2xl shadow-black/50 gap-6 md:gap-10 mx-auto"
+                : `w-full max-w-[95%] mx-auto rounded-2xl h-16 md:h-20 px-4 md:px-6 border ${
                     scrolled
                       ? "bg-gray-900/70 backdrop-blur-xl border-white/10 shadow-2xl shadow-black/20"
                       : "bg-gray-900/40 backdrop-blur-lg border-white/5"
                   }`
             }
           `}
-        >
-          {/* 1. LOGO AREA */}
-          <div
-            className={`flex items-center gap-3 animate-in fade-in duration-500 relative transition-all ${
-              headerLayout === "left" ? "flex-col w-full" : ""
-            }`}
           >
-            {/* Sidebar Toggle Button */}
-            {headerLayout === "left" && (
-              <button
-                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                className="absolute -right-6 top-1/2 -translate-y-1/2 w-6 h-12 bg-gray-900 border border-white/10 rounded-r-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/5 transition-all z-50"
-              >
-                {isSidebarCollapsed ? (
-                  <ChevronRight size={14} />
-                ) : (
-                  <ChevronLeft size={14} />
-                )}
-              </button>
-            )}
-
+            {/* 1. LOGO AREA */}
             <div
-              className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-orange-500/30 cursor-pointer hover:scale-110 transition-transform flex-shrink-0"
-              onClick={() => navigate("/")}
-            >
-              {portfolioName.charAt(0).toUpperCase()}
-            </div>
-
-            {/* Editable Title */}
-            <div
-              className={`transition-all duration-300 ease-in-out overflow-hidden ${
-                headerLayout === "left" && isSidebarCollapsed
-                  ? "max-h-0 opacity-0"
-                  : "max-h-12 opacity-100"
+              className={`flex items-center gap-3 animate-in fade-in duration-500 relative transition-all ${
+                headerLayout === "left"
+                  ? "flex-row xl:flex-col w-auto xl:w-full"
+                  : ""
               }`}
             >
-              {isOwner && isEditMode ? (
-                <input
-                  type="text"
-                  value={portfolioName}
-                  onChange={(e) => setPortfolioName(e.target.value)}
-                  className="bg-transparent border-b border-orange-500/50 text-lg font-bold tracking-tight text-white focus:outline-none focus:border-orange-500 w-32 text-center"
-                />
-              ) : (
-                <span className="text-lg font-bold tracking-tight block whitespace-nowrap">
-                  {portfolioName.substring(0, portfolioName.length - 2)}
-                  <span className="text-orange-500">
-                    {portfolioName.substring(portfolioName.length - 2)}
-                  </span>
-                </span>
+              {/* Sidebar Toggle Button - Desktop Only */}
+              {headerLayout === "left" && (
+                <button
+                  onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                  className="hidden xl:flex absolute -right-6 top-1/2 -translate-y-1/2 w-6 h-12 bg-gray-900 border border-white/10 rounded-r-xl items-center justify-center text-gray-400 hover:text-white hover:bg-white/5 transition-all z-50"
+                >
+                  {isSidebarCollapsed ? (
+                    <ChevronRight size={14} />
+                  ) : (
+                    <ChevronLeft size={14} />
+                  )}
+                </button>
               )}
-            </div>
-          </div>
 
-          {/* 2. NAVIGATION */}
-          <nav
-            className={`
-            hidden lg:flex items-center gap-2 transition-all duration-300 ease-in-out
+              <div
+                className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center text-white font-bold text-sm md:text-lg shadow-lg shadow-orange-500/30 cursor-pointer hover:scale-110 transition-transform flex-shrink-0"
+                onClick={() => navigate("/")}
+              >
+                {portfolioName.charAt(0).toUpperCase()}
+              </div>
+
+              {/* Editable Title */}
+              <div
+                className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                  headerLayout === "left" && isSidebarCollapsed
+                    ? "xl:max-h-0 xl:opacity-0"
+                    : "max-h-12 opacity-100"
+                }`}
+              >
+                {isOwner && isEditMode ? (
+                  <input
+                    type="text"
+                    value={portfolioName}
+                    onChange={(e) => setPortfolioName(e.target.value)}
+                    className="bg-transparent border-b border-orange-500/50 text-base md:text-lg font-bold tracking-tight text-white focus:outline-none focus:border-orange-500 w-24 md:w-32 text-center"
+                  />
+                ) : (
+                  <span className="text-base md:text-lg font-bold tracking-tight block whitespace-nowrap">
+                    {portfolioName.substring(0, portfolioName.length - 2)}
+                    <span className="text-orange-500">
+                      {portfolioName.substring(portfolioName.length - 2)}
+                    </span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* 2. NAVIGATION (Desktop) */}
+            <nav
+              className={`
+            hidden xl:flex items-center gap-2 transition-all duration-300 ease-in-out
             ${
               headerLayout === "left"
                 ? "flex-col w-full py-2 space-y-1" // Compact vertical stack
                 : "gap-6 bg-white/5 border border-white/5 shadow-inner backdrop-blur-md " +
                   (headerLayout === "bottom"
                     ? "rounded-full px-6 py-2"
-                    : "rounded-full px-4 py-1.5 absolute left-1/2 -translate-x-1/2")
+                    : "rounded-full px-4 py-1.5 ml-4 mr-auto") // FIXED: Removed absolute center, added left margin & auto right
             }
           `}
-          >
-            <NavItem
-              to={`/${username}/home`}
-              icon={<User size={18} />}
-              label="Overview"
-              collapsed={headerLayout === "left" && isSidebarCollapsed}
-              headerLayout={headerLayout}
-            />
-            <NavItem
-              to={`/${username}/projects`}
-              icon={<Briefcase size={18} />}
-              label="Projects"
-              collapsed={headerLayout === "left" && isSidebarCollapsed}
-              headerLayout={headerLayout}
-            />
-            {isOwner && (
+            >
               <NavItem
-                to={`/${username}/settings`}
-                icon={<Settings size={18} />}
-                label="Settings"
+                to={`/${username}/home`}
+                icon={<User size={18} />}
+                label="Overview"
                 collapsed={headerLayout === "left" && isSidebarCollapsed}
                 headerLayout={headerLayout}
               />
-            )}
-          </nav>
-
-          {/* 3. RIGHT: Actions & Profile */}
-          <div
-            className={`flex items-center transition-all duration-300 ease-in-out ${
-              headerLayout === "left"
-                ? "flex-col w-full gap-2 border-t border-white/10 pt-4"
-                : "gap-4 animate-in fade-in duration-700"
-            }`}
-          >
-            {/* NEW: Header Layout Customizer */}
-            {isOwner && isEditMode && (
-              <div
-                className={`relative ${
-                  headerLayout === "left" ? "w-full" : ""
-                }`}
-              >
-                <button
-                  onClick={() => {
-                    setIsLayoutMenuOpen(!isLayoutMenuOpen);
-                    setIsNotifDropdownOpen(false);
-                    setIsProfileDropdownOpen(false);
-                  }}
-                  className={`flex items-center transition-all duration-300 group
-                    ${
-                      headerLayout === "left"
-                        ? `w-full rounded-xl hover:bg-white/10 ${
-                            isSidebarCollapsed
-                              ? "justify-center p-3 mx-auto w-12 h-12"
-                              : "px-4 py-3 gap-3"
-                          }`
-                        : "p-2 rounded-full bg-white/5 hover:bg-white/10 text-orange-400 border border-orange-500/20 hover:rotate-90"
-                    }
-                  `}
-                  title="Customize Layout"
-                >
-                  <LayoutTemplate
-                    size={20}
-                    className={`flex-shrink-0 ${
-                      headerLayout === "left"
-                        ? "text-gray-400 group-hover:text-white"
-                        : ""
-                    }`}
-                  />
-                  {headerLayout === "left" && (
-                    <span
-                      className={`text-sm font-medium text-gray-400 group-hover:text-white whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${
-                        isSidebarCollapsed
-                          ? "w-0 opacity-0"
-                          : "w-auto opacity-100"
-                      }`}
-                    >
-                      Layout
-                    </span>
-                  )}
-                </button>
-
-                {isLayoutMenuOpen && (
-                  <div
-                    className={`absolute ${
-                      headerLayout === "bottom"
-                        ? "bottom-full mb-4 slide-in-from-bottom-2 right-0"
-                        : headerLayout === "left"
-                        ? `${
-                            isSidebarCollapsed
-                              ? "left-[calc(100%+1.5rem)]"
-                              : "left-[calc(100%+2rem)]"
-                          } bottom-0 slide-in-from-left-2`
-                        : `top-full ${
-                            headerLayout === "sticky" ? "mt-2" : "mt-4"
-                          } slide-in-from-top-2 right-0`
-                    } w-64 bg-[#0B1120] border border-white/10 rounded-2xl shadow-2xl p-3 z-[70] animate-in fade-in ring-1 ring-white/5`}
-                  >
-                    {/* (Menu Content Same as Before) */}
-                    <div className="flex items-center justify-between mb-3 px-1">
-                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                        Header Layout
-                      </span>
-                      <X
-                        size={14}
-                        className="cursor-pointer text-gray-500 hover:text-white"
-                        onClick={() => setIsLayoutMenuOpen(false)}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        {
-                          id: "standard",
-                          label: "Floating",
-                          icon: <Minimize />,
-                        },
-                        { id: "sticky", label: "Full Top", icon: <Maximize /> },
-                        { id: "left", label: "Sidebar L", icon: <AlignLeft /> },
-                        {
-                          id: "bottom",
-                          label: "Dock",
-                          icon: <PanelBottom />,
-                        },
-                      ].map((opt) => (
-                        <button
-                          key={opt.id}
-                          onClick={() => setHeaderLayout(opt.id)}
-                          className={`flex flex-col items-center justify-center gap-2 p-3 rounded-xl border transition-all ${
-                            headerLayout === opt.id
-                              ? "bg-orange-500/10 border-orange-500 text-orange-500"
-                              : "bg-white/5 border-transparent text-gray-400 hover:bg-white/10 hover:text-white"
-                          }`}
-                        >
-                          {opt.icon}
-                          <span className="text-[10px] font-medium">
-                            {opt.label}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Edit Mode Toggle */}
-            {isOwner && (
-              <div
-                className={`relative ${
-                  headerLayout === "left" ? "w-full" : ""
-                }`}
-              >
-                <button
-                  className={`flex items-center transition-all duration-300 group cursor-pointer
-                  ${
-                    headerLayout === "left"
-                      ? `w-full rounded-xl hover:bg-white/10 ${
-                          isSidebarCollapsed
-                            ? "justify-center p-3 mx-auto w-12 h-12"
-                            : "px-4 py-3 gap-3"
-                        }`
-                      : "gap-3 pl-5 pr-1.5 py-1.5 bg-[#0f1623] border border-white/5 rounded-full hover:border-white/20 hover:bg-[#131b2c] active:scale-95 shadow-inner"
-                  }
-                `}
-                  onClick={() => setIsEditMode(!isEditMode)}
-                >
-                  {/* Standard Layout Toggle UI */}
-                  {headerLayout !== "left" && (
-                    <>
-                      <span
-                        className={`text-[11px] font-black tracking-[0.15em] uppercase transition-colors duration-300 select-none ${
-                          isEditMode
-                            ? "text-orange-500"
-                            : "text-slate-400 group-hover:text-slate-300"
-                        }`}
-                      >
-                        {isEditMode ? "EDIT" : "VIEW"}
-                      </span>
-                      <div
-                        className={`relative w-11 h-6 rounded-full transition-colors duration-500 ease-out border border-white/5 ${
-                          isEditMode
-                            ? "bg-orange-500/20 ring-1 ring-orange-500/50"
-                            : "bg-slate-800 ring-1 ring-white/5"
-                        }`}
-                      >
-                        <div
-                          className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.3)] transform transition-transform duration-500 ${
-                            isEditMode ? "translate-x-5" : "translate-x-0"
-                          }`}
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {/* Sidebar Layout Toggle UI (Button Style) */}
-                  {headerLayout === "left" && (
-                    <>
-                      <div
-                        className={`relative flex-shrink-0 w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
-                          isEditMode
-                            ? "bg-orange-500 border-orange-500"
-                            : "border-gray-500 group-hover:border-white"
-                        }`}
-                      >
-                        {isEditMode && (
-                          <Check size={12} className="text-white" />
-                        )}
-                      </div>
-                      <span
-                        className={`text-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${
-                          isSidebarCollapsed
-                            ? "w-0 opacity-0"
-                            : "w-auto opacity-100"
-                        } ${
-                          isEditMode
-                            ? "text-orange-500"
-                            : "text-gray-400 group-hover:text-white"
-                        }`}
-                      >
-                        Edit Mode
-                      </span>
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
-
-            {/* Notification Dropdown */}
-            <div
-              className={`relative ${headerLayout === "left" ? "w-full" : ""}`}
-            >
-              <button
-                onClick={() => {
-                  setIsNotifDropdownOpen(!isNotifDropdownOpen);
-                  setIsProfileDropdownOpen(false);
-                  setIsLayoutMenuOpen(false);
-                }}
-                className={`flex items-center transition-all duration-300 group
-                  ${
-                    headerLayout === "left"
-                      ? `w-full rounded-xl hover:bg-white/10 ${
-                          isSidebarCollapsed
-                            ? "justify-center p-3 mx-auto w-12 h-12"
-                            : "px-4 py-3 gap-3"
-                        }`
-                      : `relative p-2 rounded-full hover:scale-110 ${
-                          isNotifDropdownOpen
-                            ? "bg-white/10 text-white"
-                            : "hover:bg-white/5 text-gray-400 hover:text-white"
-                        }`
-                  }
-                `}
-              >
-                <div className="relative flex-shrink-0">
-                  <Bell
-                    size={20}
-                    className={
-                      headerLayout === "left"
-                        ? "text-gray-400 group-hover:text-white"
-                        : ""
-                    }
-                  />
-                  <span className="absolute top-0 right-0 w-2 h-2 bg-orange-500 rounded-full border-2 border-[#0B1120] translate-x-1/2 -translate-y-1/2"></span>
-                </div>
-                {headerLayout === "left" && (
-                  <span
-                    className={`text-sm font-medium text-gray-400 group-hover:text-white whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${
-                      isSidebarCollapsed
-                        ? "w-0 opacity-0"
-                        : "w-auto opacity-100"
-                    }`}
-                  >
-                    Notifications
-                  </span>
-                )}
-              </button>
-
-              {/* Notification Content */}
-              {isNotifDropdownOpen && (
-                <div
-                  className={`absolute ${
-                    headerLayout === "bottom"
-                      ? "bottom-full mb-4 slide-in-from-bottom-2 -right-24 md:right-0"
-                      : headerLayout === "left"
-                      ? `${
-                          isSidebarCollapsed
-                            ? "left-[calc(100%+1.5rem)]"
-                            : "left-[calc(100%+2rem)]"
-                        } bottom-0 slide-in-from-left-2`
-                      : `top-full ${
-                          headerLayout === "sticky" ? "mt-2" : "mt-4"
-                        } slide-in-from-top-2 -right-24 md:right-0`
-                  } w-80 bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[60] animate-in fade-in ring-1 ring-white/5 overflow-hidden`}
-                >
-                  <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[2px] z-50 flex items-center justify-center">
-                    <span className="text-xs font-bold text-orange-400 bg-orange-400/10 px-3 py-1.5 rounded border border-orange-400/20 uppercase tracking-wider shadow-lg">
-                      Coming Soon
-                    </span>
-                  </div>
-                  <div className="p-3 border-b border-white/5">
-                    <h3 className="text-sm font-bold text-white">
-                      Notifications
-                    </h3>
-                  </div>
-                  <div className="p-8 flex flex-col items-center justify-center text-center">
-                    <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mb-3">
-                      <Bell size={20} className="text-gray-600" />
-                    </div>
-                    <p className="text-sm text-gray-400 font-medium">
-                      No new notifications
-                    </p>
-                  </div>
-                </div>
+              <NavItem
+                to={`/${username}/projects`}
+                icon={<Briefcase size={18} />}
+                label="Projects"
+                collapsed={headerLayout === "left" && isSidebarCollapsed}
+                headerLayout={headerLayout}
+              />
+              {isOwner && (
+                <NavItem
+                  to={`/${username}/settings`}
+                  icon={<Settings size={18} />}
+                  label="Settings"
+                  collapsed={headerLayout === "left" && isSidebarCollapsed}
+                  headerLayout={headerLayout}
+                />
               )}
-            </div>
+            </nav>
 
-            {/* User Profile Dropdown */}
+            {/* 3. RIGHT: Actions & Profile */}
             <div
-              className={`relative ${
+              className={`flex items-center transition-all duration-300 ease-in-out ${
                 headerLayout === "left"
-                  ? "w-full"
-                  : "pl-2 border-l border-white/10 flex items-center gap-3"
+                  ? "flex-row xl:flex-col w-auto xl:w-full gap-2 xl:border-t xl:border-white/10 xl:pt-4 xl:mt-auto"
+                  : "gap-2 md:gap-4 animate-in fade-in duration-700"
               }`}
             >
-              <button
-                className={`flex items-center transition-all duration-300 group cursor-pointer
-                  ${
-                    headerLayout === "left"
-                      ? `w-full rounded-xl hover:bg-white/10 ${
-                          isSidebarCollapsed
-                            ? "justify-center p-2 mx-auto w-12 h-12"
-                            : "px-4 py-2 gap-3"
-                        }`
-                      : "hover:scale-105"
-                  }
-                `}
-                onClick={() => {
-                  setIsProfileDropdownOpen(!isProfileDropdownOpen);
-                  setIsNotifDropdownOpen(false);
-                  setIsLayoutMenuOpen(false);
-                }}
-              >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 p-0.5 shadow-lg shadow-orange-500/20 ring-1 ring-black/40 flex-shrink-0">
+              {/* Mobile Menu Toggle (Visible on Mobile for ALL layouts) */}
+              <div className="xl:hidden flex items-center gap-3 relative">
+                {/* Mobile Profile Picture Button */}
+                <button
+                  onClick={() => {
+                    setIsProfileDropdownOpen(!isProfileDropdownOpen);
+                    setIsNotifDropdownOpen(false); // FIXED: Close notification dropdown to prevent overlap
+                    setIsMobileMenuOpen(false); // Close menu if open
+                  }}
+                  className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 p-0.5 shadow-lg shadow-orange-500/20 ring-1 ring-black/40 flex-shrink-0 cursor-pointer active:scale-95 transition-transform"
+                >
                   {dbPhotoURL || currentUser?.photoURL ? (
                     <img
                       src={dbPhotoURL || currentUser.photoURL}
@@ -655,119 +474,853 @@ const LiquidGlassPortfolioLayout = () => {
                       {currentUser?.email?.charAt(0).toUpperCase() || "U"}
                     </div>
                   )}
-                </div>
-                {headerLayout === "left" && (
+                </button>
+
+                {/* Mobile Profile Dropdown Content */}
+                {isProfileDropdownOpen && (
                   <div
-                    className={`text-left overflow-hidden transition-all duration-300 ease-in-out ${
-                      isSidebarCollapsed
-                        ? "w-0 opacity-0"
-                        : "w-auto opacity-100"
-                    }`}
+                    className={`absolute right-0 w-72 max-w-[90vw] bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[70] animate-in fade-in ring-1 ring-white/5
+                  ${
+                    headerLayout === "bottom"
+                      ? "bottom-full mb-4 slide-in-from-bottom-2 origin-bottom-right"
+                      : "top-full mt-4 slide-in-from-top-2 origin-top-right"
+                  }`}
                   >
-                    <p className="text-sm font-medium text-gray-200 group-hover:text-white truncate w-32">
-                      {currentUser?.displayName || "User"}
-                    </p>
-                    <p className="text-xs text-gray-500 truncate w-32">
-                      Profile & Settings
-                    </p>
+                    {/* User Info Card */}
+                    <div className="bg-white/5 rounded-xl p-5 mb-4 border border-white/5 flex items-center justify-between gap-4">
+                      <div className="overflow-hidden flex-1 text-left">
+                        <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1.5">
+                          Signed in as
+                        </p>
+                        <p
+                          className="text-sm font-bold text-white truncate"
+                          title={currentUser?.email}
+                        >
+                          {currentUser?.providerData?.some(
+                            (p) => p.providerId === "twitter.com"
+                          )
+                            ? currentUser?.displayName
+                            : currentUser?.email}
+                        </p>
+                      </div>
+                      {/* Service Icon */}
+                      <div className="shrink-0 p-2.5 bg-white/5 rounded-lg border border-white/5 text-gray-300 flex items-center justify-center">
+                        {currentUser?.providerData?.some(
+                          (p) => p.providerId === "google.com"
+                        ) ? (
+                          <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                              fill="#4285F4"
+                            />
+                            <path
+                              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                              fill="#34A853"
+                            />
+                            <path
+                              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                              fill="#FBBC05"
+                            />
+                            <path
+                              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                              fill="#EA4335"
+                            />
+                          </svg>
+                        ) : currentUser?.providerData?.some(
+                            (p) => p.providerId === "github.com"
+                          ) ? (
+                          <Github size={20} />
+                        ) : currentUser?.providerData?.some(
+                            (p) => p.providerId === "twitter.com"
+                          ) ? (
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                          </svg>
+                        ) : (
+                          <Mail size={20} />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Dropdown Links */}
+                    <div className="space-y-1">
+                      <button
+                        onClick={() => {
+                          navigate(`/${username}/home`);
+                          setIsProfileDropdownOpen(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
+                      >
+                        <div className="p-2 rounded-lg transition-colors bg-blue-500/10 border-blue-500/10 text-blue-500">
+                          <User size={18} />
+                        </div>
+                        Profile
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigate(`/${username}/settings`);
+                          setIsProfileDropdownOpen(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
+                      >
+                        <div className="p-2 rounded-lg transition-colors bg-orange-500/10 border-orange-500/10 text-orange-500">
+                          <Settings size={18} />
+                        </div>
+                        Settings
+                      </button>
+                    </div>
+                    <div className="h-px bg-white/5 my-2 mx-2"></div>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 text-left group text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                    >
+                      <div className="p-2 rounded-lg transition-colors bg-red-500/10 border-red-500/10">
+                        <LogOut size={18} />
+                      </div>
+                      Sign out
+                    </button>
                   </div>
                 )}
-              </button>
 
-              {/* Profile Dropdown Content (Same as before) */}
-              {isProfileDropdownOpen && (
-                <div
-                  className={`absolute ${
-                    headerLayout === "bottom"
-                      ? "bottom-full mb-4 slide-in-from-bottom-2 right-0"
-                      : headerLayout === "left"
-                      ? `${
-                          isSidebarCollapsed
-                            ? "left-[calc(100%+1.5rem)]"
-                            : "left-[calc(100%+2rem)]"
-                        } bottom-0 slide-in-from-left-2`
-                      : `top-full ${
-                          headerLayout === "sticky" ? "mt-2" : "mt-4"
-                        } slide-in-from-top-2 right-0`
-                  } w-72 bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[60] animate-in fade-in ring-1 ring-white/5`}
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(true);
+                    setIsProfileDropdownOpen(false);
+                  }}
+                  className="p-2 text-gray-400 hover:text-white"
                 >
-                  {/* User Info Card */}
-                  <div className="bg-white/5 rounded-xl p-5 mb-4 border border-white/5 flex items-center justify-between gap-4">
-                    <div className="overflow-hidden flex-1">
-                      <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1.5">
-                        Signed in as
-                      </p>
-                      <p
-                        className="text-sm font-bold text-white truncate"
-                        title={currentUser?.email}
-                      >
-                        {currentUser?.providerData?.some(
-                          (p) => p.providerId === "twitter.com"
-                        )
-                          ? currentUser?.displayName
-                          : currentUser?.email}
-                      </p>
-                    </div>
-                    {/* Service Icon... (Same) */}
-                    <div className="shrink-0 p-2.5 bg-white/5 rounded-lg border border-white/5 text-gray-300 flex items-center justify-center">
-                      <Mail size={20} />
-                    </div>
-                  </div>
+                  <Menu size={24} />
+                </button>
+              </div>
 
-                  {/* Dropdown Links */}
-                  <div className="space-y-1">
-                    <button
-                      onClick={() => navigate(`/${username}/home`)}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
-                    >
-                      <div className="p-2 rounded-lg transition-colors bg-blue-500/10 border-blue-500/10 text-blue-500">
-                        <User size={18} />
-                      </div>
-                      Profile
-                    </button>
-                    <button
-                      onClick={() => navigate(`/${username}/settings`)}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
-                    >
-                      <div className="p-2 rounded-lg transition-colors bg-orange-500/10 border-orange-500/10 text-orange-500">
-                        <Settings size={18} />
-                      </div>
-                      Settings
-                    </button>
-                  </div>
-                  <div className="h-px bg-white/5 my-2 mx-2"></div>
+              {/* ORDER: 1. Edit Mode (Top of Stack) */}
+              {/* Edit Mode Toggle - Desktop Only */}
+              {isOwner && (
+                <div
+                  className={`hidden xl:block relative ${
+                    headerLayout === "left" ? "w-full" : ""
+                  }`}
+                >
                   <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 text-left group text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                    className={`flex items-center transition-all duration-300 group cursor-pointer
+                  ${
+                    headerLayout === "left"
+                      ? `w-full rounded-xl hover:bg-white/10 ${
+                          isSidebarCollapsed
+                            ? "justify-center p-3 mx-auto w-12 h-12"
+                            : "px-4 py-3 gap-3"
+                        }`
+                      : "gap-3 pl-5 pr-1.5 py-1.5 bg-[#0f1623] border border-white/5 rounded-full hover:border-white/20 hover:bg-[#131b2c] active:scale-95 shadow-inner"
+                  }
+                `}
+                    onClick={() => setIsEditMode(!isEditMode)}
                   >
-                    <div className="p-2 rounded-lg transition-colors bg-red-500/10 border-red-500/10">
-                      <LogOut size={18} />
-                    </div>
-                    Sign out
+                    {/* Standard Layout Toggle UI */}
+                    {headerLayout !== "left" && (
+                      <>
+                        <span
+                          className={`text-[11px] font-black tracking-[0.15em] uppercase transition-colors duration-300 select-none ${
+                            isEditMode
+                              ? "text-orange-500"
+                              : "text-slate-400 group-hover:text-slate-300"
+                          }`}
+                        >
+                          {isEditMode ? "EDIT" : "VIEW"}
+                        </span>
+                        <div
+                          className={`relative w-11 h-6 rounded-full transition-colors duration-500 ease-out border border-white/5 ${
+                            isEditMode
+                              ? "bg-orange-500/20 ring-1 ring-orange-500/50"
+                              : "bg-slate-800 ring-1 ring-white/5"
+                          }`}
+                        >
+                          <div
+                            className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.3)] transform transition-transform duration-500 ${
+                              isEditMode ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {/* ... inside Edit Mode Toggle Block ... */}
+                    {headerLayout === "left" && (
+                      <>
+                        <div
+                          className={`relative flex-shrink-0 w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+                            isEditMode
+                              ? "bg-orange-500 border-orange-500"
+                              : "border-gray-500 group-hover:border-white"
+                          }`}
+                        >
+                          {isEditMode && (
+                            <Check size={12} className="text-white" />
+                          )}
+                        </div>
+                        <span
+                          className={`text-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${
+                            isSidebarCollapsed
+                              ? "w-0 opacity-0"
+                              : "w-auto opacity-100"
+                          } ${
+                            isEditMode
+                              ? "text-orange-500"
+                              : "text-gray-400 group-hover:text-white"
+                          }`}
+                        >
+                          Edit Mode
+                        </span>
+                      </>
+                    )}
                   </button>
                 </div>
               )}
+
+              {/* ORDER: 2. Save Button */}
+              {/* NEW: Global Save Button (Desktop) */}
+              {isOwner && isEditMode && (
+                <div
+                  className={`hidden xl:block relative ${
+                    headerLayout === "left" ? "w-full" : ""
+                  }`}
+                >
+                  <button
+                    onClick={handleGlobalSave}
+                    disabled={isSaving}
+                    className={`flex items-center transition-all duration-300 group cursor-pointer
+                      ${
+                        headerLayout === "left"
+                          ? `w-full rounded-xl hover:bg-orange-600/20 ${
+                              isSidebarCollapsed
+                                ? "justify-center p-3 mx-auto w-12 h-12"
+                                : "px-4 py-3 gap-3"
+                            }`
+                          : `p-2 rounded-full shadow-lg active:scale-95 ${
+                              isSaving
+                                ? saveSuccess
+                                  ? "bg-green-600 text-white shadow-green-500/20"
+                                  : "bg-red-600 text-white shadow-red-500/20"
+                                : "bg-orange-600 hover:bg-orange-500 text-white shadow-orange-500/20"
+                            }`
+                      }
+                    `}
+                    title="Save Settings"
+                  >
+                    <div className="relative flex items-center justify-center">
+                      {/* Animated Icon Swap */}
+                      <div
+                        className={`transition-all duration-300 transform ${
+                          isSaving
+                            ? "scale-0 opacity-0 absolute"
+                            : "scale-100 opacity-100"
+                        }`}
+                      >
+                        <Save
+                          size={20}
+                          className={
+                            headerLayout === "left" ? "text-orange-500" : ""
+                          }
+                        />
+                      </div>
+                      <div
+                        className={`transition-all duration-300 transform ${
+                          isSaving
+                            ? "scale-100 opacity-100"
+                            : "scale-0 opacity-0 absolute"
+                        }`}
+                      >
+                        {saveSuccess ? (
+                          <Check
+                            size={20}
+                            className={
+                              headerLayout === "left" ? "text-green-500" : ""
+                            }
+                          />
+                        ) : (
+                          <AlertCircle
+                            size={20}
+                            className={
+                              headerLayout === "left" ? "text-red-500" : ""
+                            }
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {headerLayout === "left" && (
+                      <span
+                        className={`text-sm font-bold whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${
+                          isSidebarCollapsed
+                            ? "w-0 opacity-0"
+                            : "w-auto opacity-100"
+                        } ${
+                          isSaving
+                            ? saveSuccess
+                              ? "text-green-500"
+                              : "text-red-500"
+                            : "text-orange-500"
+                        }`}
+                      >
+                        {isSaving
+                          ? saveSuccess
+                            ? "Saved!"
+                            : "No Changes"
+                          : "Save"}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* ORDER: 3. Public/Private Toggle */}
+              {/* NEW: Public/Private Toggle (Desktop) */}
+              {isOwner && isEditMode && (
+                <div
+                  className={`hidden xl:block relative ${
+                    headerLayout === "left" ? "w-full" : ""
+                  }`}
+                >
+                  <button
+                    onClick={() => setIsPublic(!isPublic)}
+                    className={`flex items-center transition-all duration-300 group cursor-pointer
+                            ${
+                              headerLayout === "left"
+                                ? `w-full rounded-xl hover:bg-white/10 ${
+                                    isSidebarCollapsed
+                                      ? "justify-center p-3 mx-auto w-12 h-12"
+                                      : "px-4 py-3 gap-3"
+                                  } ${
+                                    isPublic ? "text-green-500" : "text-red-500"
+                                  }` // FIXED: Added color logic here so Icon changes color too
+                                : `p-2 rounded-full border hover:rotate-12 ${
+                                    isPublic
+                                      ? "bg-green-500/10 border-green-500/30 text-green-500"
+                                      : "bg-red-500/10 border-red-500/30 text-red-500"
+                                  }`
+                            }
+                          `}
+                    title={isPublic ? "Public Profile" : "Private Profile"}
+                  >
+                    {isPublic ? <Globe size={20} /> : <Lock size={20} />}
+                    {headerLayout === "left" && (
+                      <span
+                        className={`text-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${
+                          isSidebarCollapsed
+                            ? "w-0 opacity-0"
+                            : "w-auto opacity-100"
+                        } ${isPublic ? "text-green-500" : "text-red-500"}`}
+                      >
+                        {isPublic ? "Public" : "Private"}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* ORDER: 4. Layouts */}
+              {/* NEW: Header Layout Customizer */}
+              {isOwner && isEditMode && (
+                <div
+                  className={`relative hidden xl:block ${
+                    headerLayout === "left" ? "w-auto xl:w-full" : ""
+                  }`}
+                >
+                  <button
+                    onClick={() => {
+                      setIsLayoutMenuOpen(!isLayoutMenuOpen);
+                      setIsNotifDropdownOpen(false);
+                      setIsProfileDropdownOpen(false);
+                    }}
+                    className={`flex items-center transition-all duration-300 group
+                            ${
+                              headerLayout === "left"
+                                ? `w-full rounded-xl hover:bg-white/10 ${
+                                    isSidebarCollapsed
+                                      ? "justify-center p-3 mx-auto w-12 h-12"
+                                      : "px-4 py-3 gap-3"
+                                  }`
+                                : "p-2 rounded-full bg-white/5 hover:bg-white/10 text-orange-400 border border-orange-500/20 hover:rotate-90"
+                            }
+                          `}
+                    title="Customize Layout"
+                  >
+                    <LayoutTemplate
+                      size={20}
+                      className={`flex-shrink-0 ${
+                        headerLayout === "left"
+                          ? "text-gray-400 group-hover:text-white"
+                          : ""
+                      }`}
+                    />
+                    {headerLayout === "left" && (
+                      <span
+                        className={`text-sm font-medium text-gray-400 group-hover:text-white whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${
+                          isSidebarCollapsed
+                            ? "w-0 opacity-0"
+                            : "w-auto opacity-100"
+                        }`}
+                      >
+                        Layout
+                      </span>
+                    )}
+                  </button>
+
+                  {isLayoutMenuOpen && (
+                    <div
+                      className={`absolute w-64 max-w-[calc(100vw-2rem)] bg-[#0B1120] border border-white/10 rounded-2xl shadow-2xl p-3 z-[70] animate-in fade-in ring-1 ring-white/5
+                            ${
+                              headerLayout === "bottom"
+                                ? "bottom-full mb-4 slide-in-from-bottom-2 right-0"
+                                : headerLayout === "left"
+                                ? `xl:left-[calc(100%+1.5rem)] xl:bottom-0 xl:top-auto xl:right-auto xl:mt-0 xl:slide-in-from-left-2 top-full right-0 mt-2`
+                                : `top-full ${
+                                    headerLayout === "sticky" ? "mt-2" : "mt-4"
+                                  } slide-in-from-top-2 right-0`
+                            }`}
+                    >
+                      <div className="flex items-center justify-between mb-3 px-1">
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                          Header Layout
+                        </span>
+                        <X
+                          size={14}
+                          className="cursor-pointer text-gray-500 hover:text-white"
+                          onClick={() => setIsLayoutMenuOpen(false)}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          {
+                            id: "standard",
+                            label: "Floating",
+                            icon: <Minimize />,
+                          },
+                          {
+                            id: "sticky",
+                            label: "Full Top",
+                            icon: <Maximize />,
+                          },
+                          {
+                            id: "left",
+                            label: "Sidebar L",
+                            icon: <AlignLeft />,
+                          },
+                          {
+                            id: "bottom",
+                            label: "Dock",
+                            icon: <PanelBottom />,
+                          },
+                        ].map((opt) => (
+                          <button
+                            key={opt.id}
+                            onClick={() => setHeaderLayout(opt.id)}
+                            className={`flex flex-col items-center justify-center gap-2 p-3 rounded-xl border transition-all ${
+                              headerLayout === opt.id
+                                ? "bg-orange-500/10 border-orange-500 text-orange-500"
+                                : "bg-white/5 border-transparent text-gray-400 hover:bg-white/10 hover:text-white"
+                            }`}
+                          >
+                            {opt.icon}
+                            <span className="text-[10px] font-medium">
+                              {opt.label}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ORDER: 5. Notifications */}
+              {/* Notification Dropdown */}
+              <div
+                /* FIXED: Added order-first to move it to the left on mobile/tab, xl:order-none restores position on desktop */
+                className={`relative block order-first xl:order-none ${
+                  headerLayout === "left" ? "xl:w-full" : ""
+                }`}
+              >
+                <button
+                  onClick={() => {
+                    setIsNotifDropdownOpen(!isNotifDropdownOpen);
+                    setIsProfileDropdownOpen(false);
+                    setIsLayoutMenuOpen(false);
+                  }}
+                  className={`flex items-center transition-all duration-300 group
+                  ${
+                    headerLayout === "left"
+                      ? /* Mobile: Standard Icon | Desktop: Sidebar Item */
+                        `relative p-2 rounded-full hover:bg-white/5 text-gray-400 hover:text-white xl:static xl:w-full xl:rounded-xl xl:hover:bg-white/10 ${
+                          isSidebarCollapsed
+                            ? "xl:justify-center xl:p-3 xl:mx-auto xl:w-12 xl:h-12"
+                            : "xl:px-4 xl:py-3 xl:gap-3"
+                        }`
+                      : /* Standard Style everywhere */
+                        `relative p-2 rounded-full hover:scale-110 ${
+                          isNotifDropdownOpen
+                            ? "bg-white/10 text-white"
+                            : "hover:bg-white/5 text-gray-400 hover:text-white"
+                        }`
+                  }
+                `}
+                >
+                  <div className="relative flex-shrink-0">
+                    <Bell
+                      size={20}
+                      className={
+                        headerLayout === "left"
+                          ? "text-gray-400 group-hover:text-white"
+                          : ""
+                      }
+                    />
+                    <span className="absolute top-0 right-0 w-2 h-2 bg-orange-500 rounded-full border-2 border-[#0B1120] translate-x-1/2 -translate-y-1/2"></span>
+                  </div>
+                  {headerLayout === "left" && (
+                    <span
+                      className={`hidden xl:block text-sm font-medium text-gray-400 group-hover:text-white whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${
+                        isSidebarCollapsed
+                          ? "w-0 opacity-0"
+                          : "w-auto opacity-100"
+                      }`}
+                    >
+                      Notifications
+                    </span>
+                  )}
+                </button>
+
+                {/* Notification Content */}
+                {isNotifDropdownOpen && (
+                  <div
+                    /* UPDATED: Mobile uses fixed positioning to center on screen. Desktop (md+) reverts to absolute relative to bell. */
+                    className={`w-80 max-w-[calc(100vw-2rem)] bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[60] animate-in fade-in ring-1 ring-white/5 overflow-hidden
+                
+                /* MOBILE: Fixed Center */
+                fixed left-1/2 -translate-x-1/2 ${
+                  headerLayout === "bottom" ? "bottom-24" : "top-24"
+                }
+
+                /* TABLET & DESKTOP: Absolute Right */
+                md:absolute md:left-auto md:translate-x-0 md:top-auto md:bottom-auto
+
+                ${
+                  headerLayout === "bottom"
+                    ? "md:bottom-full md:mb-4 md:slide-in-from-bottom-2 md:right-0"
+                    : headerLayout === "left"
+                    ? `xl:left-[calc(100%+1.5rem)] xl:bottom-0 xl:top-auto xl:right-auto xl:mt-0 xl:slide-in-from-left-2 md:top-full md:right-0 md:mt-2`
+                    : `md:top-full ${
+                        headerLayout === "sticky" ? "md:mt-2" : "md:mt-4"
+                      } md:slide-in-from-top-2 md:right-0`
+                }`}
+                  >
+                    <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[2px] z-50 flex items-center justify-center">
+                      <span className="text-xs font-bold text-orange-400 bg-orange-400/10 px-3 py-1.5 rounded border border-orange-400/20 uppercase tracking-wider shadow-lg">
+                        Coming Soon
+                      </span>
+                    </div>
+                    <div className="p-3 border-b border-white/5">
+                      <h3 className="text-sm font-bold text-white">
+                        Notifications
+                      </h3>
+                    </div>
+                    <div className="p-8 flex flex-col items-center justify-center text-center">
+                      <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mb-3">
+                        <Bell size={20} className="text-gray-600" />
+                      </div>
+                      <p className="text-sm text-gray-400 font-medium">
+                        No new notifications
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ORDER: 6. Profile (Bottom of Stack) */}
+              {/* User Profile Dropdown */}
+              <div
+                className={`relative hidden xl:block ${
+                  headerLayout === "left"
+                    ? "w-full"
+                    : "pl-2 border-l border-white/10 flex items-center gap-3"
+                }`}
+              >
+                <button
+                  className={`flex items-center transition-all duration-300 group cursor-pointer
+                  ${
+                    headerLayout === "left"
+                      ? `w-full rounded-xl hover:bg-white/10 ${
+                          isSidebarCollapsed
+                            ? "justify-center p-2 mx-auto w-12 h-12"
+                            : "px-4 py-2 gap-3"
+                        }`
+                      : "hover:scale-105"
+                  }
+                `}
+                  onClick={() => {
+                    setIsProfileDropdownOpen(!isProfileDropdownOpen);
+                    setIsNotifDropdownOpen(false);
+                    setIsLayoutMenuOpen(false);
+                  }}
+                >
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 p-0.5 shadow-lg shadow-orange-500/20 ring-1 ring-black/40 flex-shrink-0">
+                    {dbPhotoURL || currentUser?.photoURL ? (
+                      <img
+                        src={dbPhotoURL || currentUser.photoURL}
+                        alt="User"
+                        className="w-full h-full rounded-full object-cover border border-[#0B1120] bg-[#0B1120]"
+                      />
+                    ) : (
+                      <div className="w-full h-full rounded-full bg-[#0B1120] flex items-center justify-center text-[10px] font-bold text-white border border-[#0B1120]">
+                        {currentUser?.email?.charAt(0).toUpperCase() || "U"}
+                      </div>
+                    )}
+                  </div>
+                  {headerLayout === "left" && (
+                    <div
+                      className={`text-left overflow-hidden transition-all duration-300 ease-in-out ${
+                        isSidebarCollapsed
+                          ? "w-0 opacity-0"
+                          : "w-auto opacity-100"
+                      }`}
+                    >
+                      <p className="text-sm font-medium text-gray-200 group-hover:text-white truncate w-32">
+                        {currentUser?.displayName || "User"}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate w-32">
+                        Profile & Settings
+                      </p>
+                    </div>
+                  )}
+                </button>
+
+                {/* Profile Dropdown Content */}
+                {isProfileDropdownOpen && (
+                  <div
+                    className={`absolute w-72 max-w-[calc(100vw-2rem)] bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[60] animate-in fade-in ring-1 ring-white/5
+                  ${
+                    headerLayout === "bottom"
+                      ? "bottom-full mb-4 slide-in-from-bottom-2 right-0"
+                      : headerLayout === "left"
+                      ? `xl:left-[calc(100%+1.5rem)] xl:bottom-0 xl:top-auto xl:right-auto xl:mt-0 xl:slide-in-from-left-2 top-full right-0 mt-2`
+                      : `top-full ${
+                          headerLayout === "sticky" ? "mt-2" : "mt-4"
+                        } slide-in-from-top-2 right-0`
+                  }`}
+                  >
+                    {/* User Info Card */}
+                    <div className="bg-white/5 rounded-xl p-5 mb-4 border border-white/5 flex items-center justify-between gap-4">
+                      <div className="overflow-hidden flex-1">
+                        <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1.5">
+                          Signed in as
+                        </p>
+                        <p
+                          className="text-sm font-bold text-white truncate"
+                          title={currentUser?.email}
+                        >
+                          {currentUser?.providerData?.some(
+                            (p) => p.providerId === "twitter.com"
+                          )
+                            ? currentUser?.displayName
+                            : currentUser?.email}
+                        </p>
+                      </div>
+                      {/* Service Icon */}
+                      <div className="shrink-0 p-2.5 bg-white/5 rounded-lg border border-white/5 text-gray-300 flex items-center justify-center">
+                        {currentUser?.providerData?.some(
+                          (p) => p.providerId === "google.com"
+                        ) ? (
+                          /* Custom Google Icon */
+                          <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                              fill="#4285F4"
+                            />
+                            <path
+                              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                              fill="#34A853"
+                            />
+                            <path
+                              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                              fill="#FBBC05"
+                            />
+                            <path
+                              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                              fill="#EA4335"
+                            />
+                          </svg>
+                        ) : currentUser?.providerData?.some(
+                            (p) => p.providerId === "github.com"
+                          ) ? (
+                          <Github size={20} />
+                        ) : currentUser?.providerData?.some(
+                            (p) => p.providerId === "twitter.com"
+                          ) ? (
+                          /* Custom X (Twitter) Icon */
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                          </svg>
+                        ) : (
+                          <Mail size={20} /> /* Email/Password Fallback */
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Dropdown Links */}
+                    <div className="space-y-1">
+                      <button
+                        onClick={() => navigate(`/${username}/home`)}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
+                      >
+                        <div className="p-2 rounded-lg transition-colors bg-blue-500/10 border-blue-500/10 text-blue-500">
+                          <User size={18} />
+                        </div>
+                        Profile
+                      </button>
+                      <button
+                        onClick={() => navigate(`/${username}/settings`)}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
+                      >
+                        <div className="p-2 rounded-lg transition-colors bg-orange-500/10 border-orange-500/10 text-orange-500">
+                          <Settings size={18} />
+                        </div>
+                        Settings
+                      </button>
+                    </div>
+                    <div className="h-px bg-white/5 my-2 mx-2"></div>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 text-left group text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                    >
+                      <div className="p-2 rounded-lg transition-colors bg-red-500/10 border-red-500/10">
+                        <LogOut size={18} />
+                      </div>
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* --- MOBILE MENU --- */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-[60] lg:hidden">
+        <div className="fixed inset-0 z-[60] xl:hidden">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-md"
             onClick={() => setIsMobileMenuOpen(false)}
           />
-          <div className="absolute top-4 right-4 left-4 bg-[#0B1120] border border-white/10 rounded-2xl p-4 shadow-2xl animate-in slide-in-from-top-4 duration-300">
-            <div className="flex justify-between items-center mb-6">
-              <span className="font-bold text-white">Menu</span>
+          <div
+            className={`absolute bg-[#0B1120] border border-white/10 rounded-2xl p-4 shadow-2xl duration-300 max-h-[65vh] overflow-y-auto
+              ${
+                headerLayout === "bottom"
+                  ? /* Dock Layout: Added md:w-full to force expansion */
+                    "bottom-24 left-4 right-4 max-w-md mx-auto animate-in slide-in-from-bottom-4 origin-bottom md:bottom-28 md:right-8 md:left-auto md:mx-0 md:max-w-lg md:w-full md:origin-bottom-right"
+                  : /* Standard/Top Layouts: Added md:w-full to force expansion */
+                    "top-4 left-4 right-4 max-w-md mx-auto md:left-auto md:right-4 md:mx-0 md:max-w-lg md:w-full animate-in slide-in-from-top-4 origin-top md:origin-top-right"
+              }
+            `}
+          >
+            {/* --- UPDATED HEADER ROW: Menu Text & Close Button --- */}
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Menu
+              </span>
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="p-2 bg-white/5 rounded-full text-white"
+                className="p-2 bg-white/5 rounded-full text-white hover:bg-white/10 transition-colors"
               >
                 <X size={20} />
               </button>
+            </div>
+
+            {/* --- USER DETAILS CARD (Moved below header) --- */}
+            <div className="bg-white/5 rounded-xl p-4 border border-white/5 flex items-center justify-between gap-3 mb-6">
+              <div className="overflow-hidden flex-1">
+                <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1">
+                  Signed in as
+                </p>
+                <p
+                  className="text-sm font-bold text-white truncate"
+                  title={currentUser?.email}
+                >
+                  {currentUser?.providerData?.some(
+                    (p) => p.providerId === "twitter.com"
+                  )
+                    ? currentUser?.displayName
+                    : currentUser?.email}
+                </p>
+              </div>
+              {/* Service Icon - Shows Auth Type */}
+              <div className="shrink-0 p-2 bg-white/5 rounded-lg border border-white/5 text-gray-300 flex items-center justify-center">
+                {currentUser?.providerData?.some(
+                  (p) => p.providerId === "google.com"
+                ) ? (
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      fill="#4285F4"
+                    />
+                    <path
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      fill="#34A853"
+                    />
+                    <path
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                      fill="#FBBC05"
+                    />
+                    <path
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                      fill="#EA4335"
+                    />
+                  </svg>
+                ) : currentUser?.providerData?.some(
+                    (p) => p.providerId === "github.com"
+                  ) ? (
+                  <Github size={18} />
+                ) : currentUser?.providerData?.some(
+                    (p) => p.providerId === "twitter.com"
+                  ) ? (
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                  </svg>
+                ) : (
+                  <Mail size={18} />
+                )}
+              </div>
             </div>
             <nav className="flex flex-col gap-2">
               <MobileNavItem
@@ -825,6 +1378,126 @@ const LiquidGlassPortfolioLayout = () => {
                     </div>
                   </div>
 
+                  {/* Show Edit Options Only in Edit Mode */}
+                  {isEditMode && (
+                    <>
+                      {/* NEW: Mobile Public/Private Toggle */}
+                      <div
+                        onClick={() => setIsPublic(!isPublic)}
+                        className="flex items-center justify-between px-4 py-3 mt-2 rounded-xl bg-white/5 border border-white/5 cursor-pointer active:scale-95 transition-all"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`p-1.5 rounded-lg ${
+                              isPublic
+                                ? "bg-green-500/20 text-green-500"
+                                : "bg-red-500/20 text-red-500"
+                            }`}
+                          >
+                            {isPublic ? (
+                              <Globe size={16} />
+                            ) : (
+                              <Lock size={16} />
+                            )}
+                          </div>
+                          <span
+                            className={
+                              isPublic
+                                ? "text-green-500 font-medium"
+                                : "text-red-500 font-medium"
+                            }
+                          >
+                            {isPublic ? "Public Profile" : "Private Profile"}
+                          </span>
+                        </div>
+                        {/* Switch UI */}
+                        <div
+                          className={`relative w-11 h-6 rounded-full transition-colors duration-500 ease-out border border-white/5 ${
+                            isPublic
+                              ? "bg-green-500/20 ring-1 ring-green-500/50"
+                              : "bg-red-500/20 ring-1 ring-red-500/50"
+                          }`}
+                        >
+                          <div
+                            className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-sm transform transition-transform duration-500 ${
+                              isPublic ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* NEW: Mobile Save Button */}
+                      <button
+                        onClick={() => {
+                          handleGlobalSave();
+                          // Only close menu automatically if successful
+                          setTimeout(() => {
+                            setIsMobileMenuOpen(false);
+                          }, 1500);
+                        }}
+                        disabled={isSaving}
+                        className={`w-full flex items-center justify-center gap-2 mt-2 px-4 py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all duration-300 ${
+                          isSaving
+                            ? saveSuccess
+                              ? "bg-green-600 text-white shadow-green-900/20"
+                              : "bg-red-600 text-white shadow-red-900/20"
+                            : "bg-orange-600 text-white shadow-orange-900/20"
+                        }`}
+                      >
+                        {isSaving ? (
+                          saveSuccess ? (
+                            <Check size={18} />
+                          ) : (
+                            <AlertCircle size={18} />
+                          )
+                        ) : (
+                          <Save size={18} />
+                        )}
+                        {isSaving
+                          ? saveSuccess
+                            ? "Saved Successfully!"
+                            : "No Changes detected"
+                          : "Save Changes"}
+                      </button>
+
+                      {/* --- MOBILE HEADER LAYOUT SELECTOR --- */}
+                      <div className="p-4 mt-2 bg-white/5 rounded-xl border border-white/5">
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-3">
+                          Header Style
+                        </span>
+                        {/* UPDATED: Changed from grid-cols-4 to grid-cols-3 */}
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            {
+                              id: "standard",
+                              icon: <Minimize size={16} />,
+                            },
+                            { id: "sticky", icon: <Maximize size={16} /> },
+                            /* HIDDEN: Left sidebar option removed for mobile/tab */
+                            {
+                              id: "bottom",
+                              icon: <PanelBottom size={16} />,
+                            },
+                          ].map((opt) => (
+                            <button
+                              key={opt.id}
+                              onClick={() => setHeaderLayout(opt.id)}
+                              className={`flex items-center justify-center p-2 rounded-lg border transition-all ${
+                                headerLayout === opt.id ||
+                                (headerLayout === "left" &&
+                                  opt.id === "standard")
+                                  ? "bg-orange-500/20 border-orange-500 text-orange-500"
+                                  : "bg-white/5 border-transparent text-gray-400"
+                              }`}
+                            >
+                              {opt.icon}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
                   <div className="h-px bg-white/5 my-2"></div>
                 </>
               )}
@@ -846,15 +1519,26 @@ const LiquidGlassPortfolioLayout = () => {
         className={`flex-1 relative transition-all duration-500
         ${
           headerLayout === "sticky"
-            ? "pt-8"
+            ? "pt-24"
             : headerLayout === "left"
-            ? `pt-8 pl-0 ${isSidebarCollapsed ? "lg:pl-24" : "lg:pl-72"}` // UPDATED: Adjust padding based on collapse
+            ? `pt-28 xl:pt-8 ${
+                // FIXED: Removed pl-0 so mobile keeps symmetric padding (px-4). Desktop overrides with xl:pl-[...]
+                isSidebarCollapsed ? "xl:pl-[8rem]" : "xl:pl-[20rem]"
+              }` // Mobile: pt-28, Desktop: Sidebar (6rem/18rem) + Gap (2rem)
             : headerLayout === "bottom"
-            ? "pt-28 pb-32"
+            ? "pt-8 pb-32"
             : "pt-28" // standard
         } px-4 md:px-8 pb-10`}
       >
-        <div className="max-w-[90%] mx-auto relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
+        {/* UPDATED: Dynamic Slide Direction based on Header Layout */}
+        <div
+          key={headerLayout} // Forces re-animation when layout changes
+          className={`max-w-[90%] mx-auto relative z-10 animate-in fade-in duration-700 ${
+            headerLayout === "left"
+              ? "slide-in-from-right-8" // Loads from Right to Left for Sidebar
+              : "slide-in-from-bottom-8" // Default Loads from Bottom Up
+          }`}
+        >
           <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
             <span className="font-medium text-gray-400">{breadcrumbName}</span>
             <ChevronDown size={12} className="-rotate-90" />
@@ -872,6 +1556,9 @@ const LiquidGlassPortfolioLayout = () => {
               setPortfolioName,
               headerLayout,
               setHeaderLayout,
+              isPublic, // NEW
+              setIsPublic, // NEW
+              handleGlobalSave, // NEW
             }}
           />
         </div>
@@ -885,7 +1572,7 @@ const NavItem = ({ to, icon, label, collapsed, headerLayout }) => (
   <NavLink
     to={to}
     className={({ isActive }) =>
-      `group relative flex items-center transition-all duration-300 ease-in-out
+      `group relative flex items-center transition-all duration-200 ease-in-out
        ${
          headerLayout === "left"
            ? // Sidebar Styles
@@ -895,14 +1582,14 @@ const NavItem = ({ to, icon, label, collapsed, headerLayout }) => (
                  : "px-4 py-3 gap-3"
              } ${
                isActive
-                 ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg shadow-orange-500/20"
-                 : "text-gray-400 hover:bg-white/5 hover:text-white"
+                 ? "bg-white/10 backdrop-blur-md border border-orange-500/30 text-white shadow-[0_0_15px_-3px_rgba(249,115,22,0.2)]"
+                 : "text-gray-400 hover:bg-white/5 hover:text-white border border-transparent"
              }`
            : // Standard Styles
              `px-4 py-2.5 gap-2 rounded-full hover:scale-110 active:scale-95 ${
                isActive
-                 ? "bg-gradient-to-b from-orange-500 to-orange-600 text-white shadow-lg shadow-orange-500/25 ring-1 ring-orange-400/50"
-                 : "text-gray-400 hover:text-white hover:bg-white/10"
+                 ? "bg-white/10 backdrop-blur-md border border-orange-500/30 text-white shadow-[0_0_15px_-3px_rgba(249,115,22,0.2)]"
+                 : "text-gray-400 hover:text-white hover:bg-white/10 border border-transparent"
              }`
        }
       `

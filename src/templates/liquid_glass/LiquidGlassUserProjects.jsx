@@ -30,7 +30,8 @@ import ProjectViewModal from "../../modals/ProjectViewModal";
 import ProjectCommentModal from "../../modals/ProjectCommentModal";
 
 export default function LiquidGlassUserProjects() {
-  const { isEditMode } = useOutletContext();
+  // UPDATED: Get headerLayout from context
+  const { isEditMode, headerLayout } = useOutletContext();
   const { currentUser } = useAuth();
   const { username } = useParams(); // Get UID
 
@@ -234,7 +235,14 @@ export default function LiquidGlassUserProjects() {
     );
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    // UPDATED: Dynamic Slide Direction based on Header Layout
+    <div
+      className={`space-y-8 animate-in fade-in duration-700 ${
+        headerLayout === "left"
+          ? "slide-in-from-right-4"
+          : "slide-in-from-bottom-4"
+      }`}
+    >
       {/* --- Page Header --- */}
       {/* FIXED: Keep 'lg:flex-row' to stack vertically on tablets. */}
       <div className="flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center">

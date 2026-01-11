@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useOutletContext } from "react-router-dom"; // ADDED: Required for layout context
 import ReactDOM from "react-dom"; // Added for Portals
 import axios from "axios"; // Added
 import {
@@ -135,6 +136,8 @@ const NOTIFICATIONS = [
 
 // --- MAIN COMPONENT ---
 export default function LiquidGlassUserSettings() {
+  // UPDATED: Get headerLayout for dynamic animation
+  const { headerLayout } = useOutletContext();
   const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState("general");
   const [isSaving, setIsSaving] = useState(false);
@@ -292,7 +295,14 @@ export default function LiquidGlassUserSettings() {
   };
 
   return (
-    <div className="mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
+    // UPDATED: Dynamic Slide Direction based on Header Layout
+    <div
+      className={`mx-auto animate-in fade-in duration-700 ${
+        headerLayout === "left"
+          ? "slide-in-from-right-4"
+          : "slide-in-from-bottom-4"
+      }`}
+    >
       {/* Page Header */}
       <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>

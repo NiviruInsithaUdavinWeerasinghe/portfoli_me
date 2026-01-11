@@ -163,7 +163,7 @@ const RECENT_ACTIVITY = [
 // --- MAIN COMPONENT ---
 export default function LiquidGlassUserHome() {
   // UPDATED: Destructure new layout props
-  const { isEditMode, setIsEditMode, portfolioName, headerLayout } =
+  const { isEditMode, setIsEditMode, portfolioName, headerLayout, isPublic } =
     useOutletContext();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
@@ -630,6 +630,7 @@ export default function LiquidGlassUserHome() {
         await updateDoc(userRef, {
           portfolioName: portfolioName,
           headerLayout: headerLayout,
+          isPublic: isPublic, // NEW: Persist visibility
         });
       }
 
@@ -655,7 +656,14 @@ export default function LiquidGlassUserHome() {
     );
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 relative">
+    // UPDATED: Dynamic Slide Direction for Page Content
+    <div
+      className={`space-y-6 animate-in fade-in duration-700 relative ${
+        headerLayout === "left"
+          ? "slide-in-from-right-4"
+          : "slide-in-from-bottom-4"
+      }`}
+    >
       {/* Custom Notification Toast */}
       {notification && (
         <ToastNotification
@@ -805,18 +813,19 @@ const WelcomeHeader = ({
       </div>
 
       {isEditMode && (
-        <div className="flex items-center gap-3 flex-nowrap">
-          <div className="bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-lg flex items-center gap-3 animate-pulse whitespace-nowrap">
-            <div className="w-2 h-2 bg-orange-500 rounded-full" />
-            <span className="text-orange-500 text-sm font-semibold">
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex-1 md:flex-none bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-lg flex items-center justify-center md:justify-start gap-3 animate-pulse whitespace-nowrap overflow-hidden">
+            <div className="w-2 h-2 bg-orange-500 rounded-full shrink-0" />
+            <span className="text-orange-500 text-xs md:text-sm font-semibold truncate">
               Editing Enabled
             </span>
           </div>
           <button
             onClick={onSave}
-            className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors shadow-lg shadow-orange-900/20 whitespace-nowrap"
+            className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-bold text-xs md:text-sm transition-colors shadow-lg shadow-orange-900/20 whitespace-nowrap"
           >
-            <Save size={16} /> Save Changes
+            <Save size={16} className="shrink-0" />{" "}
+            <span className="truncate">Save Changes</span>
           </button>
         </div>
       )}
