@@ -565,8 +565,9 @@ export default function LiquidGlassUserHome() {
       setShowOnboarding(true);
     }
 
-    const resolvedAvatar =
-      data?.photoURL || data?.avatar || currentUser?.photoURL || defaultAvatar;
+    // [NEW - CORRECT]
+    // Remove currentUser?.photoURL. If data has no photo, go straight to default.
+    const resolvedAvatar = data?.photoURL || data?.avatar || defaultAvatar;
 
     const newProfileData = {
       name:
