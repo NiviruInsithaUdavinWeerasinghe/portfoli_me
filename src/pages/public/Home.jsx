@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext"; // Added
+import defaultAvatar2 from "../../assets/default_avatar2.png";
 
 function Home() {
   const navigate = useNavigate();
@@ -859,11 +860,12 @@ function Home() {
                       >
                         <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-orange-500 to-amber-600 mb-4 shadow-lg">
                           <img
-                            src={
-                              profile.photoURL ||
-                              "https://via.placeholder.com/150"
-                            }
+                            src={profile.photoURL || defaultAvatar2}
                             alt={profile.displayName}
+                            onError={(e) => {
+                              e.target.onerror = null; // Prevent infinite loop if default also fails
+                              e.target.src = defaultAvatar2;
+                            }}
                             className="w-full h-full rounded-full object-cover bg-[#020617]"
                           />
                         </div>
