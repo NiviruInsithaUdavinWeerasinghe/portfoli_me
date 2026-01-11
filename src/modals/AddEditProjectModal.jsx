@@ -24,11 +24,15 @@ import {
   ListOrdered,
   Link as LinkIcon,
   Info,
+  Users, // NEW: Added Users Icon
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+// NEW: Added Firestore query functions
+import { collection, query, where, getDocs, limit } from "firebase/firestore";
+import { db } from "../lib/firebase"; // Ensure db is imported
 import { uploadFileToCloudinary } from "../services/cloudinaryService";
-import { fetchUserProfile } from "../services/profileOverviewService"; // ADDED THIS
-import { decryptData } from "../lib/secureStorage"; // Import Decryption
+import { fetchUserProfile } from "../services/profileOverviewService";
+import { decryptData } from "../lib/secureStorage";
 import {
   fetchUserRepositories,
   fetchRepoLanguages,
@@ -65,7 +69,130 @@ export default function AddEditProjectModal({
     tags: [],
     media: [],
     thumbnail: "",
+    collaborators: [], // NEW: Initialize collaborators
   });
+
+  // --- NEW: Collaborator Search State & Logic ---
+  const [collabSearch, setCollabSearch] = useState("");
+  const [collabResults, setCollabResults] = useState([]);
+  const [isSearchingCollabs, setIsSearchingCollabs] = useState(false);
+
+  // Debounced Search Effect
+  useEffect(() => {
+    const searchUsers = async () => {
+      if (!collabSearch.trim()) {
+        setCollabResults([]);
+        return;
+      }
+
+      setIsSearchingCollabs(true);
+      try {
+        const usersRef = collection(db, "users");
+        const searchTerm = collabSearch.trim();
+
+        // Helper: Firestore is case-sensitive.
+        // We prepare both capitalized (Niviru) and lowercase (niviru) terms.
+        const capitalizedTerm =
+          searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1);
+        const lowerTerm = searchTerm.toLowerCase();
+
+        // 1. Search by Display Name (Prefix)
+        const qDisplayName = query(
+          usersRef,
+          where("displayName", ">=", capitalizedTerm),
+          where("displayName", "<=", capitalizedTerm + "\uf8ff"),
+          limit(5)
+        );
+
+        // 2. Search by Name field (Prefix)
+        const qName = query(
+          usersRef,
+          where("name", ">=", capitalizedTerm),
+          where("name", "<=", capitalizedTerm + "\uf8ff"),
+          limit(5)
+        );
+
+        // 3. Search by GitHub Username (Prefix)
+        const qGithub = query(
+          usersRef,
+          where("githubUsername", ">=", capitalizedTerm),
+          where("githubUsername", "<=", capitalizedTerm + "\uf8ff"),
+          limit(5)
+        );
+
+        // 4. Search by Email (Prefix)
+        const qEmail = query(
+          usersRef,
+          where("email", ">=", lowerTerm),
+          where("email", "<=", lowerTerm + "\uf8ff"),
+          limit(5)
+        );
+
+        const [displayNameSnap, nameSnap, githubSnap, emailSnap] =
+          await Promise.all([
+            getDocs(qDisplayName),
+            getDocs(qName),
+            getDocs(qGithub),
+            getDocs(qEmail),
+          ]);
+
+        const results = new Map();
+
+        // Helper to add user if not self and not already selected
+        const addUser = (doc) => {
+          const data = doc.data();
+          const uid = doc.id;
+
+          // Exclude current user
+          if (uid === currentUser.uid) return;
+
+          // FIX: Added optional chaining (?.) to prevent crash if collaborators is undefined
+          if (formData.collaborators?.some((c) => c.uid === uid)) return;
+
+          if (!results.has(uid)) {
+            results.set(uid, {
+              uid,
+              displayName: data.displayName || data.name || "Unknown",
+              email: data.email,
+              photoURL: data.photoURL,
+              role: data.role || "User",
+              githubUsername: data.githubUsername,
+            });
+          }
+        };
+
+        displayNameSnap.forEach(addUser);
+        nameSnap.forEach(addUser);
+        githubSnap.forEach(addUser);
+        emailSnap.forEach(addUser);
+
+        setCollabResults(Array.from(results.values()));
+      } catch (error) {
+        console.error("Error searching collaborators:", error);
+      } finally {
+        setIsSearchingCollabs(false);
+      }
+    };
+
+    const timeoutId = setTimeout(searchUsers, 500); // 500ms debounce
+    return () => clearTimeout(timeoutId);
+  }, [collabSearch, currentUser.uid, formData.collaborators]);
+
+  const addCollaborator = (user) => {
+    setFormData((prev) => ({
+      ...prev,
+      collaborators: [...(prev.collaborators || []), user],
+    }));
+    setCollabSearch(""); // Clear search
+    setCollabResults([]); // Clear results
+  };
+
+  const removeCollaborator = (uid) => {
+    setFormData((prev) => ({
+      ...prev,
+      collaborators: prev.collaborators.filter((c) => c.uid !== uid),
+    }));
+  };
 
   // NEW: Track original data for unsaved changes detection
   const [initialFormData, setInitialFormData] = useState(null);
@@ -99,9 +226,27 @@ export default function AddEditProjectModal({
   // NEW: A Promise Queue to ensure batches are processed in strict order (First In, First Out)
   const uploadQueue = useRef(Promise.resolve());
 
+  // NEW: Ref to track cancellation request
+  const uploadCancelledRef = useRef(false);
+
   const [tagInput, setTagInput] = useState("");
   const [error, setError] = useState("");
   const [isDragging, setIsDragging] = useState(false); // NEW: Drag state
+
+  // NEW: Handler to stop upload and prevent state updates
+  const handleStopUpload = () => {
+    if (uploading) {
+      uploadCancelledRef.current = true;
+      setUploadCounter(0); // Force UI to stop loading state
+      setError("Upload stopped by user.");
+    }
+  };
+
+  // NEW: Wrapper to safely close modal and stop background uploads
+  const handleSafeClose = () => {
+    handleStopUpload();
+    onClose();
+  };
 
   // --- Text Editor State & Logic ---
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -365,6 +510,8 @@ export default function AddEditProjectModal({
         startDate: initialData.startDate || "",
         endDate: initialData.endDate || "",
         thumbnail: initialData.thumbnail || initialData.image || "",
+        // FIX: Ensure collaborators is always an array, even if missing in DB
+        collaborators: initialData.collaborators || [],
       };
       setFormData(startData);
       setInitialFormData(startData); // NEW: Set baseline for comparison
@@ -385,6 +532,7 @@ export default function AddEditProjectModal({
         tags: [],
         media: [],
         thumbnail: "",
+        collaborators: [], // NEW
       };
       setFormData(startData);
       setInitialFormData(startData); // NEW: Set baseline for comparison
@@ -458,17 +606,25 @@ export default function AddEditProjectModal({
 
     // 1. Immediately signal that uploading has started (increments counter)
     setUploadCounter((prev) => prev + 1);
+    uploadCancelledRef.current = false; // Reset cancellation flag on new upload
 
     // 2. Add this batch to the Queue.
-    // This ensures Batch B waits for Batch A to finish before starting/displaying.
-    // This preserves the exact order of selection/dropping.
     uploadQueue.current = uploadQueue.current.then(async () => {
+      // CHECK: If cancelled before this batch starts, skip
+      if (uploadCancelledRef.current) {
+        setUploadCounter((prev) => Math.max(0, prev - 1));
+        return;
+      }
+
       try {
         const uploadPromises = files.map((file) =>
           uploadFileToCloudinary(file)
         );
         // Wait for all files in *this* specific batch to finish
         const uploadedMedia = await Promise.all(uploadPromises);
+
+        // CHECK: If cancelled during upload, do not update state
+        if (uploadCancelledRef.current) return;
 
         // Update State (Show previews only after this batch is fully done)
         setFormData((prev) => {
@@ -495,11 +651,13 @@ export default function AddEditProjectModal({
           setTempMedia((prev) => [...prev, ...uploadedMedia]);
         }
       } catch (error) {
-        console.error("Upload failed", error);
-        setError("Failed to upload one or more files.");
+        if (!uploadCancelledRef.current) {
+          console.error("Upload failed", error);
+          setError("Failed to upload one or more files.");
+        }
       } finally {
         // 3. Decrement counter only when this specific batch is truly done
-        setUploadCounter((prev) => prev - 1);
+        setUploadCounter((prev) => Math.max(0, prev - 1));
       }
     });
   };
@@ -919,7 +1077,7 @@ export default function AddEditProjectModal({
               )}
           </div>
           <button
-            onClick={onClose}
+            onClick={handleSafeClose} // Updated to safe close
             className="text-gray-500 hover:text-white transition-colors"
           >
             <X size={24} />
@@ -1605,23 +1763,134 @@ export default function AddEditProjectModal({
                 />
               </div>
             </div>
+
+            {/* --- NEW: COLLABORATORS SECTION --- */}
+            <div className="space-y-4 pt-4 border-t border-white/10">
+              <label className="text-sm font-medium text-gray-400 flex items-center gap-2">
+                <Users size={16} /> Collaborators
+              </label>
+
+              {/* Search Input & Dropdown */}
+              <div className="relative z-20">
+                <input
+                  type="text"
+                  value={collabSearch}
+                  onChange={(e) => setCollabSearch(e.target.value)}
+                  placeholder="Search by name or email..."
+                  className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-orange-500/50 focus:outline-none placeholder:text-gray-600"
+                />
+
+                {/* Search Loading Indicator */}
+                {isSearchingCollabs && (
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    <Loader2
+                      className="animate-spin text-orange-500"
+                      size={16}
+                    />
+                  </div>
+                )}
+
+                {/* Dropdown Results */}
+                {collabResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-[#0F1623] border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-y-auto scrollbar-hide animate-in fade-in zoom-in-95 duration-200">
+                    {collabResults.map((user) => (
+                      <button
+                        key={user.uid}
+                        type="button"
+                        onClick={() => addCollaborator(user)}
+                        className="w-full flex items-center gap-3 p-3 hover:bg-white/5 transition-colors text-left border-b border-white/5 last:border-0"
+                      >
+                        <img
+                          src={
+                            user.photoURL ||
+                            `https://ui-avatars.com/api/?name=${user.displayName}&background=random`
+                          }
+                          alt={user.displayName}
+                          className="w-8 h-8 rounded-full object-cover bg-gray-800"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-white truncate">
+                            {user.displayName}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {user.email}
+                          </p>
+                        </div>
+                        <div className="text-xs text-orange-500 font-medium px-2 py-1 bg-orange-500/10 rounded">
+                          Add
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Selected Collaborators List (Character Cards) */}
+              {formData.collaborators && formData.collaborators.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  {formData.collaborators.map((collab) => (
+                    <div
+                      key={collab.uid}
+                      className="flex items-center gap-3 bg-white/5 border border-white/10 p-2 rounded-xl group animate-in fade-in slide-in-from-bottom-2"
+                    >
+                      <img
+                        src={
+                          collab.photoURL ||
+                          `https://ui-avatars.com/api/?name=${collab.displayName}&background=random`
+                        }
+                        alt={collab.displayName}
+                        className="w-10 h-10 rounded-full object-cover border border-white/10"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-white truncate">
+                          {collab.displayName}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {collab.role || "Collaborator"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeCollaborator(collab.uid)}
+                        className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                        title="Remove Collaborator"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </form>
         </div>
 
         <div className="p-6 border-t border-white/5 flex justify-end gap-3 bg-black/20 rounded-b-2xl backdrop-blur-md">
           <button
-            onClick={onClose}
+            onClick={handleSafeClose} // Updated to safe close
             className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
           >
             Cancel
           </button>
+
+          {/* NEW: Stop Upload Button */}
+          {uploading && (
+            <button
+              type="button"
+              onClick={handleStopUpload}
+              className="px-5 py-2.5 rounded-xl text-sm font-bold bg-red-600/20 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white transition-all flex items-center gap-2"
+            >
+              <X size={16} /> Stop Upload
+            </button>
+          )}
+
           <button
             type="submit"
             form="project-form"
             disabled={uploading}
             className="px-5 py-2.5 rounded-xl text-sm font-bold bg-orange-600 hover:bg-orange-500 text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
-            {uploading ? "Uploading Media..." : "Save Project"}
+            {uploading ? "Uploading..." : "Save Project"}
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom"; // NEW: Imported createPortal
 import { useOutletContext, useLocation, useParams } from "react-router-dom";
 import {
   Plus,
@@ -24,7 +25,14 @@ import {
   toggleProjectLike,
 } from "../../services/projectService";
 import { db } from "../../lib/firebase";
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  collectionGroup,
+  where,
+} from "firebase/firestore";
 import AddEditProjectModal from "../../modals/AddEditProjectModal";
 import ProjectViewModal from "../../modals/ProjectViewModal";
 import ProjectCommentModal from "../../modals/ProjectCommentModal";
@@ -66,8 +74,18 @@ export default function LiquidGlassUserProjects() {
   }, [location]);
 
   const [projects, setProjects] = useState([]);
+  // NEW: Separate states for owned vs. collaborated projects to merge them later
+  const [ownedProjects, setOwnedProjects] = useState([]);
+  const [collabProjects, setCollabProjects] = useState([]);
+
   const [commentCounts, setCommentCounts] = useState({}); // New state for live comment counts
-  const [loading, setLoading] = useState(true);
+
+  // UPDATED: Granular loading states to ensure both sources load before showing content
+  const [isOwnedLoading, setIsOwnedLoading] = useState(true);
+  const [isCollabLoading, setIsCollabLoading] = useState(true);
+
+  // Derived loading state: Only false when BOTH have loaded
+  const loading = isOwnedLoading || isCollabLoading;
 
   // UI State
   const [viewMode, setViewMode] = useState("grid");
@@ -84,43 +102,86 @@ export default function LiquidGlassUserProjects() {
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState(null);
 
-  // 1. Live Projects Listener (Handles Projects + Appreciation/Likes)
+  // 1. Live Projects Listener (Handles Owned + Collaborating Projects)
   useEffect(() => {
     if (!targetUid) return;
-    setLoading(true);
 
+    // Reset loading states when targetUid changes
+    setIsOwnedLoading(true);
+    setIsCollabLoading(true);
+
+    // A. Listener for Projects Owned by targetUid
     const projectsRef = collection(db, "users", targetUid, "projects");
-    // Assuming createdAt is available, otherwise remove orderBy
-    const q = query(projectsRef, orderBy("createdAt", "desc"));
+    const qOwned = query(projectsRef, orderBy("createdAt", "desc"));
 
-    const unsubscribe = onSnapshot(
-      q,
+    const unsubOwned = onSnapshot(
+      qOwned,
       (snapshot) => {
-        const liveProjects = snapshot.docs.map((doc) => ({
+        const liveOwned = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
+          isOwned: true, // Helper flag
+          ownerId: targetUid, // Explicitly set owner
         }));
-        setProjects(liveProjects);
-        setLoading(false);
+        setOwnedProjects(liveOwned);
+        setIsOwnedLoading(false); // Mark owned as loaded
       },
-      (error) => {
-        console.error("Error listening to projects:", error);
-        setLoading(false);
-      }
+      (error) => console.error("Error listening to owned projects:", error)
     );
 
-    return () => unsubscribe();
+    // B. Listener for Projects where targetUid is a Collaborator
+    // Note: This requires the "collaboratorIds" field we added in projectService
+    const qCollab = query(
+      collectionGroup(db, "projects"),
+      where("collaboratorIds", "array-contains", targetUid)
+    );
+
+    const unsubCollab = onSnapshot(
+      qCollab,
+      (snapshot) => {
+        const liveCollab = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          isOwned: false, // Helper flag
+          ownerId: doc.ref.parent.parent.id, // Capture the actual owner's UID from the doc reference
+        }));
+        setCollabProjects(liveCollab);
+        setIsCollabLoading(false); // Mark collab as loaded
+      },
+      (error) => console.error("Error listening to collab projects:", error)
+    );
+
+    return () => {
+      unsubOwned();
+      unsubCollab();
+    };
   }, [targetUid]);
+
+  // Merge and Sort projects whenever source lists change
+  useEffect(() => {
+    const combined = [...ownedProjects, ...collabProjects];
+    // Sort by createdAt desc (handling cases where createdAt might be missing/pending)
+    combined.sort((a, b) => {
+      const dateA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+      const dateB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+      return dateB - dateA;
+    });
+    setProjects(combined);
+    // Removed setLoading(false) here because loading is now derived
+  }, [ownedProjects, collabProjects]);
 
   // 2. Live Comments Listener (Handles Comment Counts)
   useEffect(() => {
     const unsubscribers = [];
 
     projects.forEach((project) => {
+      // UPDATED: Use the project's specific ownerId (needed for collab projects)
+      const projectOwnerId = project.ownerId || targetUid;
+
       const commentsRef = collection(
         db,
         "users",
-        targetUid,
+        projectOwnerId,
         "projects",
         project.id,
         "comments"
@@ -197,7 +258,12 @@ export default function LiquidGlassUserProjects() {
 
     try {
       // Just call the service. The onSnapshot listener will update the UI.
-      await toggleProjectLike(targetUid, project.id, currentUser.uid);
+      // UPDATED: Use project.ownerId to target the correct database path (for collaborator projects)
+      await toggleProjectLike(
+        project.ownerId || targetUid,
+        project.id,
+        currentUser.uid
+      );
     } catch (error) {
       console.error("Failed to toggle like", error);
     }
@@ -392,6 +458,8 @@ export default function LiquidGlassUserProjects() {
         isOpen={showViewModal}
         onClose={() => setShowViewModal(false)}
         project={selectedProject}
+        currentUser={currentUser}
+        profileOwnerId={targetUid}
       />
 
       <AddEditProjectModal
@@ -401,46 +469,71 @@ export default function LiquidGlassUserProjects() {
         onSave={handleSaveProject}
       />
 
-      {/* FIX: Pass targetUid as ownerId to ensure correct DB path */}
+      {/* UPDATED: Pass correct ownerId. If it's a collab project, use its ownerId, else targetUid */}
       <ProjectCommentModal
         isOpen={showCommentModal}
         onClose={() => setShowCommentModal(false)}
         project={
           selectedProjectForComments
-            ? { ...selectedProjectForComments, ownerId: targetUid }
+            ? {
+                ...selectedProjectForComments,
+                ownerId: selectedProjectForComments.ownerId || targetUid,
+              }
             : null
         }
         currentUser={currentUser}
       />
 
-      {isDeleteAlertOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-md"
-            onClick={() => setIsDeleteAlertOpen(false)}
-          />
-          <div className="relative w-full max-w-md bg-gray-900 border border-white/10 rounded-2xl p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-white mb-2">
-              Delete Project?
-            </h3>
-            <p className="text-gray-400 mb-6">This action cannot be undone.</p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setIsDeleteAlertOpen(false)}
-                className="px-4 py-2 text-gray-300 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl"
-              >
-                Delete
-              </button>
+      {isDeleteAlertOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300"
+              onClick={() => setIsDeleteAlertOpen(false)}
+            />
+            {/* Modal Card */}
+            <div className="relative w-full max-w-sm bg-[#0B1120] border border-white/10 rounded-2xl p-6 shadow-[0_0_50px_-12px_rgba(220,38,38,0.5)] animate-in zoom-in-95 duration-300 overflow-hidden">
+              {/* Red Glow Effect at top */}
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-600 via-orange-600 to-red-600 opacity-50" />
+
+              <div className="flex flex-col items-center text-center gap-4">
+                {/* Icon Wrapper */}
+                <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-2">
+                  <Trash2 className="text-red-500" size={32} />
+                </div>
+
+                {/* Text Content */}
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-2">
+                    Delete Project?
+                  </h3>
+                  <p className="text-sm text-gray-400 leading-relaxed">
+                    This will permanently delete this project and remove all
+                    associated media. This action cannot be undone.
+                  </p>
+                </div>
+
+                {/* Actions Grid */}
+                <div className="grid grid-cols-2 gap-3 w-full mt-2">
+                  <button
+                    onClick={() => setIsDeleteAlertOpen(false)}
+                    className="px-4 py-3 rounded-xl text-sm font-bold text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    className="px-4 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 shadow-lg shadow-red-900/20 transition-all"
+                  >
+                    Yes, Delete
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
@@ -505,8 +598,10 @@ const ProjectGridCard = ({
             {project.status}
           </span>
         </div>
-        {isEditMode && (
-          <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* UPDATED: Only show edit buttons if page is in edit mode AND the project is owned by the user */}
+        {isEditMode && project.isOwned && (
+          /* FIX: Changed opacity to be visible by default, and only apply hover-hide logic on Large screens (lg) */
+          <div className="absolute top-3 right-3 flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
             <button
               onClick={onEdit}
               className="p-2 bg-black/40 backdrop-blur-md border border-white/10 text-white hover:text-orange-400 rounded-lg hover:scale-105 transition-all"
@@ -678,7 +773,8 @@ const ProjectListCard = ({
               <Calendar size={10} /> {dateString}
             </div>
           )}
-          {isEditMode && (
+          {/* UPDATED: Only show edit buttons if page is in edit mode AND the project is owned by the user */}
+          {isEditMode && project.isOwned && (
             <div className="flex gap-1">
               <button
                 onClick={onEdit}
@@ -735,9 +831,14 @@ const ProjectListCard = ({
             <div className="flex items-center gap-2 text-gray-500">
               <button
                 onClick={onLike}
-                className="flex items-center gap-1 text-[10px] sm:text-xs hover:text-blue-500"
+                className={`flex items-center gap-1 text-[10px] sm:text-xs transition-colors ${
+                  isLiked
+                    ? "text-blue-500"
+                    : "text-gray-500 hover:text-blue-500"
+                }`}
               >
-                <ThumbsUp size={12} /> {project.appreciation || 0}
+                <ThumbsUp size={12} fill={isLiked ? "currentColor" : "none"} />{" "}
+                {project.appreciation || 0}
               </button>
               <button
                 onClick={onComment}

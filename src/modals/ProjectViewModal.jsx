@@ -1,6 +1,8 @@
 // FIX: Added useRef to imports
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { doc, getDoc } from "firebase/firestore"; // NEW
+import { db } from "../lib/firebase"; // NEW
 import {
   X,
   ExternalLink,
@@ -13,9 +15,16 @@ import {
   Loader,
   Maximize2, // NEW: Import Maximize icon
   Minimize2, // NEW: Import Minimize icon
+  User, // NEW: Import User icon for avatar fallback
 } from "lucide-react";
 
-export default function ProjectViewModal({ project, isOpen, onClose }) {
+export default function ProjectViewModal({
+  project,
+  isOpen,
+  onClose,
+  currentUser,
+  profileOwnerId,
+}) {
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [isMediaLoaded, setIsMediaLoaded] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false); // NEW: State for lightbox
@@ -28,6 +37,24 @@ export default function ProjectViewModal({ project, isOpen, onClose }) {
     setActiveMediaIndex(0);
     setIsMediaLoaded(false);
   }, [project]);
+
+  // NEW: Fetch Project Owner Details for display (Fixes missing name/photo)
+  const [ownerData, setOwnerData] = useState(null);
+  useEffect(() => {
+    const fetchOwnerDetails = async () => {
+      if (project?.ownerId) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", project.ownerId));
+          if (userDoc.exists()) {
+            setOwnerData(userDoc.data());
+          }
+        } catch (error) {
+          console.error("Error fetching owner details:", error);
+        }
+      }
+    };
+    fetchOwnerDetails();
+  }, [project?.ownerId]);
 
   // Reset loading state when navigating between media
   useEffect(() => {
@@ -343,6 +370,114 @@ export default function ProjectViewModal({ project, isOpen, onClose }) {
                   })}
                 </div>
               </div>
+
+              {/* --- NEW: COLLABORATORS SECTION (Conditional Logic Updated) --- */}
+              {(() => {
+                const projectOwnerId = project.ownerId;
+                const isUserProjectOwner = currentUser?.uid === projectOwnerId;
+
+                // 1. Determine Display List
+                // Start with project collaborators
+                let displayCollaborators = [...(project.collaborators || [])];
+
+                // FIX: Remove the current user from the list (Self-Visibility Fix)
+                if (currentUser) {
+                  displayCollaborators = displayCollaborators.filter(
+                    (c) => c.uid !== currentUser.uid
+                  );
+                }
+
+                // If Logged-in User is NOT the Owner, we must show the Owner in the list
+                if (!isUserProjectOwner && projectOwnerId) {
+                  const ownerExists = displayCollaborators.some(
+                    (c) => c.uid === projectOwnerId
+                  );
+                  if (!ownerExists) {
+                    // FIX: Use fetched ownerData instead of placeholders
+                    displayCollaborators.unshift({
+                      uid: projectOwnerId,
+                      displayName: ownerData?.displayName || "Project Owner",
+                      photoURL: ownerData?.photoURL || null,
+                      role: ownerData?.role || "Owner",
+                      isOwnerLabel: true,
+                    });
+                  }
+                }
+
+                if (displayCollaborators.length === 0) return null;
+
+                return (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-3">
+                      Collaborators
+                    </h3>
+                    <div className="grid grid-cols-1 gap-3">
+                      {displayCollaborators.map((collab) => {
+                        // 2. Button Logic
+                        // Requirements:
+                        // - Show button for everyone EXCEPT the profile owner (profile currently being viewed).
+                        // - This applies to everyone (Owner, Collaborators, and Third Party).
+                        const showPortfolioButton =
+                          collab.uid !== profileOwnerId;
+
+                        return (
+                          <div
+                            key={collab.uid}
+                            className={`flex items-start gap-3 p-3 bg-white/5 border border-white/10 rounded-xl group hover:border-white/20 transition-all ${
+                              collab.isOwnerLabel
+                                ? "border-orange-500/30 bg-orange-500/5"
+                                : ""
+                            }`}
+                          >
+                            {/* Avatar */}
+                            {collab.photoURL ? (
+                              <img
+                                src={collab.photoURL}
+                                alt={collab.displayName}
+                                className="w-10 h-10 rounded-full object-cover border border-white/10 mt-1"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white border border-white/10 mt-1">
+                                <User size={18} />
+                              </div>
+                            )}
+
+                            {/* Details Column */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-bold text-white truncate">
+                                  {collab.displayName}
+                                </p>
+                                {/* Owner Label Visual */}
+                                {collab.isOwnerLabel && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-500 text-white uppercase tracking-wider">
+                                    Owner
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-400 truncate mb-2">
+                                {collab.role || "Collaborator"}
+                              </p>
+
+                              {/* Glass Button Under Role */}
+                              {showPortfolioButton && (
+                                <a
+                                  href={`/${collab.uid}/home`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="w-full py-2 flex items-center justify-center gap-2 rounded-lg bg-white/5 border border-white/10 backdrop-blur-sm text-xs font-bold text-gray-300 hover:bg-orange-600 hover:text-white hover:border-orange-500/50 transition-all shadow-sm"
+                                >
+                                  View Portfolio <ExternalLink size={12} />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 

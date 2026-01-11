@@ -30,8 +30,14 @@ export const getUserProjects = async (userId) => {
 export const addProject = async (userId, projectData) => {
   try {
     const projectsRef = collection(db, "users", userId, "projects");
+
+    // NEW: Extract just the UIDs into a separate array for efficient querying
+    // This allows us to use 'array-contains' in Firestore queries
+    const collaboratorIds = projectData.collaborators?.map((c) => c.uid) || [];
+
     await addDoc(projectsRef, {
       ...projectData,
+      collaboratorIds, // Saved as ["uid1", "uid2"]
       appreciation: 0,
       likedBy: [],
       createdAt: serverTimestamp(),
@@ -46,8 +52,13 @@ export const addProject = async (userId, projectData) => {
 export const updateProject = async (userId, projectId, projectData) => {
   try {
     const projectRef = doc(db, "users", userId, "projects", projectId);
+
+    // NEW: Ensure collaboratorIds is updated when editing
+    const collaboratorIds = projectData.collaborators?.map((c) => c.uid) || [];
+
     await updateDoc(projectRef, {
       ...projectData,
+      collaboratorIds, // Saved as ["uid1", "uid2"]
       updatedAt: serverTimestamp(),
     });
   } catch (error) {
