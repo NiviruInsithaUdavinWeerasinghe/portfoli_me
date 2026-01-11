@@ -57,7 +57,12 @@ const LiquidGlassPortfolioLayout = () => {
   // NEW: Customization States
   const [isLoadingSettings, setIsLoadingSettings] = useState(true); // NEW: Prevents flash of default header
   const [portfolioName, setPortfolioName] = useState("PortfoliMe");
-  const [headerLayout, setHeaderLayout] = useState("standard"); // standard, sticky, left, right
+
+  // FIX: Initialize from localStorage to prevents "Flash of Default Content"
+  const [headerLayout, setHeaderLayout] = useState(() => {
+    return localStorage.getItem("headerLayout") || "standard";
+  });
+
   const [isPublic, setIsPublic] = useState(true); // NEW: Visibility State
   const [isLayoutMenuOpen, setIsLayoutMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); // NEW: Sidebar Toggle
@@ -67,30 +72,12 @@ const LiquidGlassPortfolioLayout = () => {
     localStorage.setItem("isEditMode", isEditMode);
   }, [isEditMode]);
 
-  // NEW: Fetch Customization Settings
+  // FIX: Save headerLayout to localStorage whenever it changes
   useEffect(() => {
-    const fetchSettings = async () => {
-      if (!username) {
-        setIsLoadingSettings(false);
-        return;
-      }
-      try {
-        const userDocRef = doc(db, "users", username);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const data = userDocSnap.data();
-          if (data.portfolioName) setPortfolioName(data.portfolioName);
-          if (data.headerLayout) setHeaderLayout(data.headerLayout);
-          if (data.isPublic !== undefined) setIsPublic(data.isPublic); // NEW: Load visibility
-        }
-      } catch (error) {
-        console.error("Error fetching settings:", error);
-      } finally {
-        setIsLoadingSettings(false); // NEW: Allow header to render only after data is fetched
-      }
-    };
-    fetchSettings();
-  }, [username]);
+    if (headerLayout) {
+      localStorage.setItem("headerLayout", headerLayout);
+    }
+  }, [headerLayout]);
 
   // NEW: Track Original Settings for Comparison
   const [originalSettings, setOriginalSettings] = useState({
@@ -103,22 +90,28 @@ const LiquidGlassPortfolioLayout = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(true); // true = Success, false = Error (No changes)
 
-  // UPDATED: Fetch Settings & Set Baseline
+  // CONSOLIDATED FIX: Single Effect to Fetch, Update State, Set Baseline, and Stop Loading
   useEffect(() => {
     const fetchSettings = async () => {
-      if (!username) return;
+      if (!username) {
+        setIsLoadingSettings(false);
+        return;
+      }
       try {
         const userDocRef = doc(db, "users", username);
         const userDocSnap = await getDoc(userDocRef);
+
         if (userDocSnap.exists()) {
           const data = userDocSnap.data();
+
+          // Prepare new settings object
           const fetchedSettings = {
             portfolioName: data.portfolioName || "PortfoliMe",
             headerLayout: data.headerLayout || "standard",
             isPublic: data.isPublic !== undefined ? data.isPublic : true,
           };
 
-          // Apply to UI state
+          // Update UI States immediately
           setPortfolioName(fetchedSettings.portfolioName);
           setHeaderLayout(fetchedSettings.headerLayout);
           setIsPublic(fetchedSettings.isPublic);
@@ -128,6 +121,9 @@ const LiquidGlassPortfolioLayout = () => {
         }
       } catch (error) {
         console.error("Error fetching settings:", error);
+      } finally {
+        // Ensure this runs only AFTER states are queued to update
+        setIsLoadingSettings(false);
       }
     };
     fetchSettings();
@@ -1245,7 +1241,7 @@ const LiquidGlassPortfolioLayout = () => {
           >
             {/* --- UPDATED HEADER ROW: Menu Text & Close Button --- */}
             <div className="flex justify-between items-center mb-4">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+              <span className="text-base font-bold text-gray-500 uppercase tracking-wider">
                 Menu
               </span>
               <button
@@ -1539,28 +1535,35 @@ const LiquidGlassPortfolioLayout = () => {
               : "slide-in-from-bottom-8" // Default Loads from Bottom Up
           }`}
         >
-          <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
-            <span className="font-medium text-gray-400">{breadcrumbName}</span>
-            <ChevronDown size={12} className="-rotate-90" />
-            <span className="text-white font-medium capitalize">
-              {location.pathname.split("/").pop()}
-            </span>
-          </div>
+          {!isLoadingSettings && (
+            <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
+              <span className="font-medium text-gray-400">
+                {breadcrumbName}
+              </span>
+              <ChevronDown size={12} className="-rotate-90" />
+              <span className="text-white font-medium capitalize">
+                {location.pathname.split("/").pop()}
+              </span>
+            </div>
+          )}
+
           {/* Passing context + Header Customization props */}
-          <Outlet
-            context={{
-              isEditMode,
-              setIsEditMode,
-              isOwner,
-              portfolioName,
-              setPortfolioName,
-              headerLayout,
-              setHeaderLayout,
-              isPublic, // NEW
-              setIsPublic, // NEW
-              handleGlobalSave, // NEW
-            }}
-          />
+          {!isLoadingSettings && (
+            <Outlet
+              context={{
+                isEditMode,
+                setIsEditMode,
+                isOwner,
+                portfolioName,
+                setPortfolioName,
+                headerLayout,
+                setHeaderLayout,
+                isPublic,
+                setIsPublic,
+                handleGlobalSave,
+              }}
+            />
+          )}
         </div>
       </main>
     </div>
@@ -1616,11 +1619,11 @@ const MobileNavItem = ({ to, icon, label, onClick }) => (
     to={to}
     onClick={onClick}
     className={({ isActive }) =>
-      `flex items-center gap-3 px-4 py-3 rounded-xl transition-colors
+      `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 border
        ${
          isActive
-           ? "bg-orange-600 text-white"
-           : "text-gray-400 hover:bg-white/5 hover:text-white"
+           ? "bg-white/10 backdrop-blur-md border-orange-500/30 text-white shadow-[0_0_15px_-3px_rgba(249,115,22,0.2)]"
+           : "border-transparent text-gray-400 hover:bg-white/5 hover:text-white"
        }`
     }
   >
