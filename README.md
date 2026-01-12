@@ -12,15 +12,13 @@
 
 ## 📸 Screenshots
 
-*(Add your screenshots here)*
-
 | Landing Page | Portfolio View |
 |:---:|:---:|
 | ![Landing Page Preview]<img width="1919" height="1046" alt="Screenshot 2026-01-12 102031" src="https://github.com/user-attachments/assets/e82dffd6-dd49-4185-a6ae-540fd3db10a2" /> | ![Portfolio Preview]<img width="1919" height="1043" alt="image" src="https://github.com/user-attachments/assets/c3dbc3b9-446b-4542-b9f4-9164704dfae1" />|
 
-| Theme: Cyberpunk | Theme: Liquid Glass |
+| Theme: Cyberpunk | Theme: Skeuomorphism |
 |:---:|:---:|
-| ![Cyberpunk Theme](path/to/cyberpunk-image.png) | ![Liquid Glass Theme](path/to/liquid-glass-image.png) |
+| ![Cyberpunk Theme](path/to/cyberpunk-image.png) | ![Skeuomorphism Theme](<img width="1919" height="1047" alt="image" src="https://github.com/user-attachments/assets/2ee0062b-4ead-4f21-a84e-7cee1a876417" />) |
 
 ---
 
