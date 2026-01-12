@@ -87,4 +87,4 @@ Switch between completely different visual identities with a single click. The c
 
 ---
 
-Developed with ❤️ by [Niviru Insitha Udavin Weerasinghe](https://github.com/NiviruInsithaUdavinWeerasinghe)
+Developed with 💛 by [Niviru Insitha Udavin Weerasinghe](https://github.com/NiviruInsithaUdavinWeerasinghe)
