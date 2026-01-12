@@ -16,7 +16,7 @@
 
 | Landing Page | Portfolio View |
 |:---:|:---:|
-| ![Landing Page Preview](<img width="1919" height="1046" alt="Screenshot 2026-01-12 102031" src="https://github.com/user-attachments/assets/e82dffd6-dd49-4185-a6ae-540fd3db10a2" />) | ![Portfolio Preview](path/to/portfolio-image.png) |
+| ![Landing Page Preview]<img width="1919" height="1046" alt="Screenshot 2026-01-12 102031" src="https://github.com/user-attachments/assets/e82dffd6-dd49-4185-a6ae-540fd3db10a2" /> | ![Portfolio Preview](path/to/portfolio-image.png) |
 
 | Theme: Cyberpunk | Theme: Liquid Glass |
 |:---:|:---:|
