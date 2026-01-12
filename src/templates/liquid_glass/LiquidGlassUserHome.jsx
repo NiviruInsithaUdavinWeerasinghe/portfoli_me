@@ -169,8 +169,12 @@ export default function LiquidGlassUserHome() {
   const navigate = useNavigate();
   const { username } = useParams();
 
+  // Allow viewing if username param exists, even if not logged in
   const targetUid = username || currentUser?.uid;
-  const isOwner = currentUser?.uid === targetUid;
+
+  // Strict check: Must be logged in AND uid must match target to be owner
+  const isOwner =
+    currentUser?.uid && targetUid && currentUser.uid === targetUid;
 
   const effectiveEditMode = isOwner && isEditMode;
 
@@ -552,7 +556,10 @@ export default function LiquidGlassUserHome() {
       }
     }
 
-    updateUserStatus(currentUser.uid, true);
+    // FIXED: Only update status if a user is actually logged in and it's their profile
+    if (currentUser?.uid && isOwner) {
+      updateUserStatus(currentUser.uid, true);
+    }
     setLoading(false);
   };
 

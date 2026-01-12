@@ -450,30 +450,32 @@ const LiquidGlassPortfolioLayout = () => {
             >
               {/* Mobile Menu Toggle (Visible on Mobile for ALL layouts) */}
               <div className="xl:hidden flex items-center gap-3 relative">
-                {/* Mobile Profile Picture Button */}
-                <button
-                  onClick={() => {
-                    setIsProfileDropdownOpen(!isProfileDropdownOpen);
-                    setIsNotifDropdownOpen(false); // FIXED: Close notification dropdown to prevent overlap
-                    setIsMobileMenuOpen(false); // Close menu if open
-                  }}
-                  className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 p-0.5 shadow-lg shadow-orange-500/20 ring-1 ring-black/40 flex-shrink-0 cursor-pointer active:scale-95 transition-transform"
-                >
-                  {dbPhotoURL || currentUser?.photoURL ? (
-                    <img
-                      src={dbPhotoURL || currentUser.photoURL}
-                      alt="User"
-                      className="w-full h-full rounded-full object-cover border border-[#0B1120] bg-[#0B1120]"
-                    />
-                  ) : (
-                    <div className="w-full h-full rounded-full bg-[#0B1120] flex items-center justify-center text-[10px] font-bold text-white border border-[#0B1120]">
-                      {currentUser?.email?.charAt(0).toUpperCase() || "U"}
-                    </div>
-                  )}
-                </button>
+                {/* Mobile Profile Picture Button - HIDE IF NOT LOGGED IN */}
+                {currentUser && (
+                  <button
+                    onClick={() => {
+                      setIsProfileDropdownOpen(!isProfileDropdownOpen);
+                      setIsNotifDropdownOpen(false); // FIXED: Close notification dropdown to prevent overlap
+                      setIsMobileMenuOpen(false); // Close menu if open
+                    }}
+                    className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 p-0.5 shadow-lg shadow-orange-500/20 ring-1 ring-black/40 flex-shrink-0 cursor-pointer active:scale-95 transition-transform"
+                  >
+                    {dbPhotoURL || currentUser?.photoURL ? (
+                      <img
+                        src={dbPhotoURL || currentUser.photoURL}
+                        alt="User"
+                        className="w-full h-full rounded-full object-cover border border-[#0B1120] bg-[#0B1120]"
+                      />
+                    ) : (
+                      <div className="w-full h-full rounded-full bg-[#0B1120] flex items-center justify-center text-[10px] font-bold text-white border border-[#0B1120]">
+                        {currentUser?.email?.charAt(0).toUpperCase() || "U"}
+                      </div>
+                    )}
+                  </button>
+                )}
 
                 {/* Mobile Profile Dropdown Content */}
-                {isProfileDropdownOpen && (
+                {currentUser && isProfileDropdownOpen && (
                   <div
                     className={`absolute right-0 w-72 max-w-[90vw] bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[70] animate-in fade-in ring-1 ring-white/5
                   ${
@@ -940,20 +942,21 @@ const LiquidGlassPortfolioLayout = () => {
               )}
 
               {/* ORDER: 5. Notifications */}
-              {/* Notification Dropdown */}
-              <div
-                /* FIXED: Added order-first to move it to the left on mobile/tab, xl:order-none restores position on desktop */
-                className={`relative block order-first xl:order-none ${
-                  headerLayout === "left" ? "xl:w-full" : ""
-                }`}
-              >
-                <button
-                  onClick={() => {
-                    setIsNotifDropdownOpen(!isNotifDropdownOpen);
-                    setIsProfileDropdownOpen(false);
-                    setIsLayoutMenuOpen(false);
-                  }}
-                  className={`flex items-center transition-all duration-300 group
+              {/* Notification Dropdown - HIDE IF NOT LOGGED IN */}
+              {currentUser && (
+                <div
+                  /* FIXED: Added order-first to move it to the left on mobile/tab, xl:order-none restores position on desktop */
+                  className={`relative block order-first xl:order-none ${
+                    headerLayout === "left" ? "xl:w-full" : ""
+                  }`}
+                >
+                  <button
+                    onClick={() => {
+                      setIsNotifDropdownOpen(!isNotifDropdownOpen);
+                      setIsProfileDropdownOpen(false);
+                      setIsLayoutMenuOpen(false);
+                    }}
+                    className={`flex items-center transition-all duration-300 group
                   ${
                     headerLayout === "left"
                       ? /* Mobile: Standard Icon | Desktop: Sidebar Item */
@@ -970,37 +973,37 @@ const LiquidGlassPortfolioLayout = () => {
                         }`
                   }
                 `}
-                >
-                  <div className="relative flex-shrink-0">
-                    <Bell
-                      size={20}
-                      className={
-                        headerLayout === "left"
-                          ? "text-gray-400 group-hover:text-white"
-                          : ""
-                      }
-                    />
-                    <span className="absolute top-0 right-0 w-2 h-2 bg-orange-500 rounded-full border-2 border-[#0B1120] translate-x-1/2 -translate-y-1/2"></span>
-                  </div>
-                  {headerLayout === "left" && (
-                    <span
-                      className={`hidden xl:block text-sm font-medium text-gray-400 group-hover:text-white whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${
-                        isSidebarCollapsed
-                          ? "w-0 opacity-0"
-                          : "w-auto opacity-100"
-                      }`}
-                    >
-                      Notifications
-                    </span>
-                  )}
-                </button>
+                  >
+                    <div className="relative flex-shrink-0">
+                      <Bell
+                        size={20}
+                        className={
+                          headerLayout === "left"
+                            ? "text-gray-400 group-hover:text-white"
+                            : ""
+                        }
+                      />
+                      <span className="absolute top-0 right-0 w-2 h-2 bg-orange-500 rounded-full border-2 border-[#0B1120] translate-x-1/2 -translate-y-1/2"></span>
+                    </div>
+                    {headerLayout === "left" && (
+                      <span
+                        className={`hidden xl:block text-sm font-medium text-gray-400 group-hover:text-white whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${
+                          isSidebarCollapsed
+                            ? "w-0 opacity-0"
+                            : "w-auto opacity-100"
+                        }`}
+                      >
+                        Notifications
+                      </span>
+                    )}
+                  </button>
 
-                {/* Notification Content */}
-                {isNotifDropdownOpen && (
-                  <div
-                    /* UPDATED: Mobile uses fixed positioning to center on screen. Desktop (md+) reverts to absolute relative to bell. */
-                    className={`w-80 max-w-[calc(100vw-2rem)] bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[60] animate-in fade-in ring-1 ring-white/5 overflow-hidden
-                
+                  {/* Notification Content */}
+                  {isNotifDropdownOpen && (
+                    <div
+                      /* UPDATED: Mobile uses fixed positioning to center on screen. Desktop (md+) reverts to absolute relative to bell. */
+                      className={`w-80 max-w-[calc(100vw-2rem)] bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[60] animate-in fade-in ring-1 ring-white/5
+                 
                 /* MOBILE: Fixed Center */
                 fixed left-1/2 -translate-x-1/2 ${
                   headerLayout === "bottom" ? "bottom-24" : "top-24"
@@ -1018,40 +1021,42 @@ const LiquidGlassPortfolioLayout = () => {
                         headerLayout === "sticky" ? "md:mt-2" : "md:mt-4"
                       } md:slide-in-from-top-2 md:right-0`
                 }`}
-                  >
-                    <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[2px] z-50 flex items-center justify-center">
-                      <span className="text-xs font-bold text-orange-400 bg-orange-400/10 px-3 py-1.5 rounded border border-orange-400/20 uppercase tracking-wider shadow-lg">
-                        Coming Soon
-                      </span>
-                    </div>
-                    <div className="p-3 border-b border-white/5">
-                      <h3 className="text-sm font-bold text-white">
-                        Notifications
-                      </h3>
-                    </div>
-                    <div className="p-8 flex flex-col items-center justify-center text-center">
-                      <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mb-3">
-                        <Bell size={20} className="text-gray-600" />
+                    >
+                      <div className="absolute inset-0 bg-[#0B1120]/80 backdrop-blur-[2px] z-50 flex items-center justify-center">
+                        <span className="text-xs font-bold text-orange-400 bg-orange-400/10 px-3 py-1.5 rounded border border-orange-400/20 uppercase tracking-wider shadow-lg">
+                          Coming Soon
+                        </span>
                       </div>
-                      <p className="text-sm text-gray-400 font-medium">
-                        No new notifications
-                      </p>
+                      <div className="p-3 border-b border-white/5">
+                        <h3 className="text-sm font-bold text-white">
+                          Notifications
+                        </h3>
+                      </div>
+                      <div className="p-8 flex flex-col items-center justify-center text-center">
+                        <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mb-3">
+                          <Bell size={20} className="text-gray-600" />
+                        </div>
+                        <p className="text-sm text-gray-400 font-medium">
+                          No new notifications
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
 
               {/* ORDER: 6. Profile (Bottom of Stack) */}
-              {/* User Profile Dropdown */}
-              <div
-                className={`relative hidden xl:block ${
-                  headerLayout === "left"
-                    ? "w-full"
-                    : "pl-2 border-l border-white/10 flex items-center gap-3"
-                }`}
-              >
-                <button
-                  className={`flex items-center transition-all duration-300 group cursor-pointer
+              {/* User Profile Dropdown - HIDE IF NOT LOGGED IN */}
+              {currentUser && (
+                <div
+                  className={`relative hidden xl:block ${
+                    headerLayout === "left"
+                      ? "w-full"
+                      : "pl-2 border-l border-white/10 flex items-center gap-3"
+                  }`}
+                >
+                  <button
+                    className={`flex items-center transition-all duration-300 group cursor-pointer
                   ${
                     headerLayout === "left"
                       ? `w-full rounded-xl hover:bg-white/10 ${
@@ -1062,47 +1067,47 @@ const LiquidGlassPortfolioLayout = () => {
                       : "hover:scale-105"
                   }
                 `}
-                  onClick={() => {
-                    setIsProfileDropdownOpen(!isProfileDropdownOpen);
-                    setIsNotifDropdownOpen(false);
-                    setIsLayoutMenuOpen(false);
-                  }}
-                >
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 p-0.5 shadow-lg shadow-orange-500/20 ring-1 ring-black/40 flex-shrink-0">
-                    {dbPhotoURL || currentUser?.photoURL ? (
-                      <img
-                        src={dbPhotoURL || currentUser.photoURL}
-                        alt="User"
-                        className="w-full h-full rounded-full object-cover border border-[#0B1120] bg-[#0B1120]"
-                      />
-                    ) : (
-                      <div className="w-full h-full rounded-full bg-[#0B1120] flex items-center justify-center text-[10px] font-bold text-white border border-[#0B1120]">
-                        {currentUser?.email?.charAt(0).toUpperCase() || "U"}
+                    onClick={() => {
+                      setIsProfileDropdownOpen(!isProfileDropdownOpen);
+                      setIsNotifDropdownOpen(false);
+                      setIsLayoutMenuOpen(false);
+                    }}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 p-0.5 shadow-lg shadow-orange-500/20 ring-1 ring-black/40 flex-shrink-0">
+                      {dbPhotoURL || currentUser?.photoURL ? (
+                        <img
+                          src={dbPhotoURL || currentUser.photoURL}
+                          alt="User"
+                          className="w-full h-full rounded-full object-cover border border-[#0B1120] bg-[#0B1120]"
+                        />
+                      ) : (
+                        <div className="w-full h-full rounded-full bg-[#0B1120] flex items-center justify-center text-[10px] font-bold text-white border border-[#0B1120]">
+                          {currentUser?.email?.charAt(0).toUpperCase() || "U"}
+                        </div>
+                      )}
+                    </div>
+                    {headerLayout === "left" && (
+                      <div
+                        className={`text-left overflow-hidden transition-all duration-300 ease-in-out ${
+                          isSidebarCollapsed
+                            ? "w-0 opacity-0"
+                            : "w-auto opacity-100"
+                        }`}
+                      >
+                        <p className="text-sm font-medium text-gray-200 group-hover:text-white truncate w-32">
+                          {currentUser?.displayName || "User"}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate w-32">
+                          Profile & Settings
+                        </p>
                       </div>
                     )}
-                  </div>
-                  {headerLayout === "left" && (
-                    <div
-                      className={`text-left overflow-hidden transition-all duration-300 ease-in-out ${
-                        isSidebarCollapsed
-                          ? "w-0 opacity-0"
-                          : "w-auto opacity-100"
-                      }`}
-                    >
-                      <p className="text-sm font-medium text-gray-200 group-hover:text-white truncate w-32">
-                        {currentUser?.displayName || "User"}
-                      </p>
-                      <p className="text-xs text-gray-500 truncate w-32">
-                        Profile & Settings
-                      </p>
-                    </div>
-                  )}
-                </button>
+                  </button>
 
-                {/* Profile Dropdown Content */}
-                {isProfileDropdownOpen && (
-                  <div
-                    className={`absolute w-72 max-w-[calc(100vw-2rem)] bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[60] animate-in fade-in ring-1 ring-white/5
+                  {/* Profile Dropdown Content */}
+                  {isProfileDropdownOpen && (
+                    <div
+                      className={`absolute w-72 max-w-[calc(100vw-2rem)] bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] p-2 z-[60] animate-in fade-in ring-1 ring-white/5
                   ${
                     headerLayout === "bottom"
                       ? "bottom-full mb-4 slide-in-from-bottom-2 right-0"
@@ -1112,110 +1117,111 @@ const LiquidGlassPortfolioLayout = () => {
                           headerLayout === "sticky" ? "mt-2" : "mt-4"
                         } slide-in-from-top-2 right-0`
                   }`}
-                  >
-                    {/* User Info Card */}
-                    <div className="bg-white/5 rounded-xl p-5 mb-4 border border-white/5 flex items-center justify-between gap-4">
-                      <div className="overflow-hidden flex-1">
-                        <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1.5">
-                          Signed in as
-                        </p>
-                        <p
-                          className="text-sm font-bold text-white truncate"
-                          title={currentUser?.email}
-                        >
-                          {currentUser?.providerData?.some(
-                            (p) => p.providerId === "twitter.com"
-                          )
-                            ? currentUser?.displayName
-                            : currentUser?.email}
-                        </p>
-                      </div>
-                      {/* Service Icon */}
-                      <div className="shrink-0 p-2.5 bg-white/5 rounded-lg border border-white/5 text-gray-300 flex items-center justify-center">
-                        {currentUser?.providerData?.some(
-                          (p) => p.providerId === "google.com"
-                        ) ? (
-                          /* Custom Google Icon */
-                          <svg
-                            width="20"
-                            height="20"
-                            viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                              fill="#4285F4"
-                            />
-                            <path
-                              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                              fill="#34A853"
-                            />
-                            <path
-                              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                              fill="#FBBC05"
-                            />
-                            <path
-                              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                              fill="#EA4335"
-                            />
-                          </svg>
-                        ) : currentUser?.providerData?.some(
-                            (p) => p.providerId === "github.com"
-                          ) ? (
-                          <Github size={20} />
-                        ) : currentUser?.providerData?.some(
-                            (p) => p.providerId === "twitter.com"
-                          ) ? (
-                          /* Custom X (Twitter) Icon */
-                          <svg
-                            width="18"
-                            height="18"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                          </svg>
-                        ) : (
-                          <Mail size={20} /> /* Email/Password Fallback */
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Dropdown Links */}
-                    <div className="space-y-1">
-                      <button
-                        onClick={() => navigate(`/${username}/home`)}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
-                      >
-                        <div className="p-2 rounded-lg transition-colors bg-blue-500/10 border-blue-500/10 text-blue-500">
-                          <User size={18} />
-                        </div>
-                        Profile
-                      </button>
-                      <button
-                        onClick={() => navigate(`/${username}/settings`)}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
-                      >
-                        <div className="p-2 rounded-lg transition-colors bg-orange-500/10 border-orange-500/10 text-orange-500">
-                          <Settings size={18} />
-                        </div>
-                        Settings
-                      </button>
-                    </div>
-                    <div className="h-px bg-white/5 my-2 mx-2"></div>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 text-left group text-red-400 hover:bg-red-500/10 hover:text-red-300"
                     >
-                      <div className="p-2 rounded-lg transition-colors bg-red-500/10 border-red-500/10">
-                        <LogOut size={18} />
+                      {/* User Info Card */}
+                      <div className="bg-white/5 rounded-xl p-5 mb-4 border border-white/5 flex items-center justify-between gap-4">
+                        <div className="overflow-hidden flex-1">
+                          <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1.5">
+                            Signed in as
+                          </p>
+                          <p
+                            className="text-sm font-bold text-white truncate"
+                            title={currentUser?.email}
+                          >
+                            {currentUser?.providerData?.some(
+                              (p) => p.providerId === "twitter.com"
+                            )
+                              ? currentUser?.displayName
+                              : currentUser?.email}
+                          </p>
+                        </div>
+                        {/* Service Icon */}
+                        <div className="shrink-0 p-2.5 bg-white/5 rounded-lg border border-white/5 text-gray-300 flex items-center justify-center">
+                          {currentUser?.providerData?.some(
+                            (p) => p.providerId === "google.com"
+                          ) ? (
+                            /* Custom Google Icon */
+                            <svg
+                              width="20"
+                              height="20"
+                              viewBox="0 0 24 24"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <path
+                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                fill="#4285F4"
+                              />
+                              <path
+                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                fill="#34A853"
+                              />
+                              <path
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                                fill="#FBBC05"
+                              />
+                              <path
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                                fill="#EA4335"
+                              />
+                            </svg>
+                          ) : currentUser?.providerData?.some(
+                              (p) => p.providerId === "github.com"
+                            ) ? (
+                            <Github size={20} />
+                          ) : currentUser?.providerData?.some(
+                              (p) => p.providerId === "twitter.com"
+                            ) ? (
+                            /* Custom X (Twitter) Icon */
+                            <svg
+                              width="18"
+                              height="18"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                            </svg>
+                          ) : (
+                            <Mail size={20} /> /* Email/Password Fallback */
+                          )}
+                        </div>
                       </div>
-                      Sign out
-                    </button>
-                  </div>
-                )}
-              </div>
+
+                      {/* Dropdown Links */}
+                      <div className="space-y-1">
+                        <button
+                          onClick={() => navigate(`/${username}/home`)}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
+                        >
+                          <div className="p-2 rounded-lg transition-colors bg-blue-500/10 border-blue-500/10 text-blue-500">
+                            <User size={18} />
+                          </div>
+                          Profile
+                        </button>
+                        <button
+                          onClick={() => navigate(`/${username}/settings`)}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
+                        >
+                          <div className="p-2 rounded-lg transition-colors bg-orange-500/10 border-orange-500/10 text-orange-500">
+                            <Settings size={18} />
+                          </div>
+                          Settings
+                        </button>
+                      </div>
+                      <div className="h-px bg-white/5 my-2 mx-2"></div>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 text-left group text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                      >
+                        <div className="p-2 rounded-lg transition-colors bg-red-500/10 border-red-500/10">
+                          <LogOut size={18} />
+                        </div>
+                        Sign out
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </header>

@@ -374,33 +374,108 @@ export default function ProjectViewModal({
               {/* --- NEW: COLLABORATORS SECTION (Conditional Logic Updated) --- */}
               {(() => {
                 const projectOwnerId = project.ownerId;
-                const isUserProjectOwner = currentUser?.uid === projectOwnerId;
 
                 // 1. Determine Display List
-                // Start with project collaborators
                 let displayCollaborators = [...(project.collaborators || [])];
 
-                // FIX: Remove the current user from the list (Self-Visibility Fix)
+                // --- LOGIC SPLIT: GUEST VS LOGGED IN ---
+
                 if (currentUser) {
+                  // === LOGGED IN VIEW ===
+
+                  // 1. Identify User Relation BEFORE filtering
+                  const existingUserCollab = displayCollaborators.find(
+                    (c) => c.uid === currentUser.uid
+                  );
+                  const isUserProjectOwner = projectOwnerId === currentUser.uid;
+
+                  // 2. Filter out Profile Owner (Prevent viewing Profile Owner on their own profile)
+                  if (profileOwnerId) {
+                    displayCollaborators = displayCollaborators.filter(
+                      (c) => c.uid !== profileOwnerId
+                    );
+                  }
+
+                  // 3. Filter out Current User (Prevent redundancy, we will re-inject as "Hey you" if needed)
                   displayCollaborators = displayCollaborators.filter(
                     (c) => c.uid !== currentUser.uid
                   );
-                }
 
-                // If Logged-in User is NOT the Owner, we must show the Owner in the list
-                if (!isUserProjectOwner && projectOwnerId) {
-                  const ownerExists = displayCollaborators.some(
-                    (c) => c.uid === projectOwnerId
-                  );
-                  if (!ownerExists) {
-                    // FIX: Use fetched ownerData instead of placeholders
+                  // 4. "Hey, this is you" Logic
+                  // Trigger: User is NOT viewing their own profile AND (User is Owner OR User is Collaborator)
+                  if (
+                    currentUser.uid !== profileOwnerId &&
+                    (isUserProjectOwner || existingUserCollab)
+                  ) {
+                    // Determine correct role (Don't hardcode "Owner")
+                    let displayRole = "Collaborator";
+                    if (isUserProjectOwner) {
+                      displayRole = ownerData?.role || "Project Owner";
+                    } else if (existingUserCollab) {
+                      displayRole = existingUserCollab.role || "Collaborator";
+                    }
+
                     displayCollaborators.unshift({
-                      uid: projectOwnerId,
-                      displayName: ownerData?.displayName || "Project Owner",
-                      photoURL: ownerData?.photoURL || null,
-                      role: ownerData?.role || "Owner",
-                      isOwnerLabel: true,
+                      uid: currentUser.uid,
+                      displayName: "Hey, this is you",
+                      photoURL:
+                        currentUser.photoURL ||
+                        (isUserProjectOwner
+                          ? ownerData?.photoURL
+                          : existingUserCollab?.photoURL),
+                      role: displayRole,
+                      isOwnerLabel: isUserProjectOwner,
+                      isCurrentUser: true, // Flag to hide "View Portfolio" button
                     });
+                  }
+
+                  // 5. Standard Owner Injection
+                  // Trigger: Owner is NOT Current User AND Owner is NOT Profile Owner (already filtered) AND Owner not in list
+                  if (
+                    !isUserProjectOwner &&
+                    projectOwnerId &&
+                    projectOwnerId !== profileOwnerId
+                  ) {
+                    const ownerInList = displayCollaborators.some(
+                      (c) => c.uid === projectOwnerId
+                    );
+                    if (!ownerInList) {
+                      displayCollaborators.unshift({
+                        uid: projectOwnerId,
+                        displayName: ownerData?.displayName || "Project Owner",
+                        photoURL: ownerData?.photoURL || null,
+                        role: ownerData?.role || "Owner",
+                        isOwnerLabel: true,
+                      });
+                    }
+                  }
+                } else {
+                  // === GUEST VIEW (User not logged in) ===
+
+                  // 1. Filter out the Profile Owner to prevent redundancy
+                  // (If we are viewing this on John's profile, remove John from the list)
+                  if (profileOwnerId) {
+                    displayCollaborators = displayCollaborators.filter(
+                      (c) => c.uid !== profileOwnerId
+                    );
+                  }
+
+                  // 2. Ensure Project Owner is visible
+                  // (Unless the Project Owner IS the Profile Owner we just filtered out)
+                  if (projectOwnerId && projectOwnerId !== profileOwnerId) {
+                    const ownerAlreadyInList = displayCollaborators.some(
+                      (c) => c.uid === projectOwnerId
+                    );
+
+                    if (!ownerAlreadyInList) {
+                      displayCollaborators.unshift({
+                        uid: projectOwnerId,
+                        displayName: ownerData?.displayName || "Project Owner",
+                        photoURL: ownerData?.photoURL || null,
+                        role: ownerData?.role || "Owner",
+                        isOwnerLabel: true,
+                      });
+                    }
                   }
                 }
 
@@ -415,10 +490,11 @@ export default function ProjectViewModal({
                       {displayCollaborators.map((collab) => {
                         // 2. Button Logic
                         // Requirements:
-                        // - Show button for everyone EXCEPT the profile owner (profile currently being viewed).
-                        // - This applies to everyone (Owner, Collaborators, and Third Party).
+                        // - Hide for Profile Owner.
+                        // - Hide for "Hey, this is you" (isCurrentUser flag).
                         const showPortfolioButton =
-                          collab.uid !== profileOwnerId;
+                          collab.uid !== profileOwnerId &&
+                          !collab.isCurrentUser;
 
                         return (
                           <div

@@ -10,7 +10,12 @@ import SkeuomorphismUserHome from "../../templates/skeuomorphism/SkeuomorphismUs
 
 const UserHome = () => {
   // const { theme } = useTheme();
-  const theme = "liquid_glass"; // This must match the Layout theme
+  // For now, hardcoding the test theme:
+  const theme = "liquid_glass";
+  // const theme = "minimalist";
+  // const theme = "cyberpunk";
+  // const theme = "paper_sketch";
+  // const theme = "skeuomorphism";
 
   switch (theme) {
     case "minimalist":

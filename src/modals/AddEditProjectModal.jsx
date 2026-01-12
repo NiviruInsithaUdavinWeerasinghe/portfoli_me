@@ -143,8 +143,8 @@ export default function AddEditProjectModal({
           const data = doc.data();
           const uid = doc.id;
 
-          // Exclude current user
-          if (uid === currentUser.uid) return;
+          // Exclude current user (Safe check for guests)
+          if (currentUser && uid === currentUser.uid) return;
 
           // FIX: Added optional chaining (?.) to prevent crash if collaborators is undefined
           if (formData.collaborators?.some((c) => c.uid === uid)) return;
@@ -176,7 +176,8 @@ export default function AddEditProjectModal({
 
     const timeoutId = setTimeout(searchUsers, 500); // 500ms debounce
     return () => clearTimeout(timeoutId);
-  }, [collabSearch, currentUser.uid, formData.collaborators]);
+    // FIXED: Used currentUser?.uid to safely handle null users (guests)
+  }, [collabSearch, currentUser?.uid, formData.collaborators]);
 
   const addCollaborator = (user) => {
     setFormData((prev) => ({

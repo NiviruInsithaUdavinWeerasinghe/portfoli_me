@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom"; // NEW: Import useNavigate
 import {
   X,
   Send,
   Trash2,
   MessageCircle,
+  LogIn, // NEW: Import LogIn Icon
   MoreVertical,
   CornerDownRight,
   AlertTriangle,
@@ -377,6 +379,7 @@ export default function ProjectCommentModal({
   project,
   currentUser,
 }) {
+  const navigate = useNavigate(); // NEW: Initialize Hook
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(true);
@@ -650,8 +653,8 @@ export default function ProjectCommentModal({
           <div ref={commentsEndRef} />
         </div>
 
-        {/* Footer Input */}
-        {currentUser && (
+        {/* Footer Input or Login Prompt */}
+        {currentUser ? (
           <div className="p-5 bg-black/20 border-t border-white/5 backdrop-blur-md z-20">
             <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl px-2 py-2 focus-within:bg-white/10 focus-within:border-orange-500/30 focus-within:shadow-lg focus-within:shadow-orange-500/10 transition-all duration-300 ease-in-out">
               <img
@@ -675,6 +678,19 @@ export default function ProjectCommentModal({
                 <Send size={18} />
               </button>
             </div>
+          </div>
+        ) : (
+          <div className="p-6 bg-black/40 border-t border-white/5 backdrop-blur-md z-20 flex flex-col items-center justify-center text-center gap-3">
+            <p className="text-sm text-gray-400">
+              Sign in to share your thoughts and ask questions.
+            </p>
+            <button
+              onClick={() => navigate("/login")}
+              className="flex items-center gap-2 px-6 py-2.5 bg-orange-600 hover:bg-orange-500 text-white text-sm font-bold rounded-xl transition-all duration-200 hover:scale-105 shadow-lg shadow-orange-900/20"
+            >
+              <LogIn size={16} />
+              Log in to Comment
+            </button>
           </div>
         )}
       </div>

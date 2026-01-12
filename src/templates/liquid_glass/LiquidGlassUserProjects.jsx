@@ -1,9 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom"; // NEW: Imported createPortal
-import { useOutletContext, useLocation, useParams } from "react-router-dom";
+import {
+  useOutletContext,
+  useLocation,
+  useParams,
+  useNavigate,
+} from "react-router-dom";
 import {
   Plus,
   Search,
+  LogIn, // NEW: Imported LogIn icon
   LayoutGrid,
   List as ListIcon,
   Loader2,
@@ -38,14 +44,20 @@ import ProjectViewModal from "../../modals/ProjectViewModal";
 import ProjectCommentModal from "../../modals/ProjectCommentModal";
 
 export default function LiquidGlassUserProjects() {
+  const navigate = useNavigate(); // NEW: Hook for redirection
   // UPDATED: Get headerLayout from context
   const { isEditMode, headerLayout } = useOutletContext();
   const { currentUser } = useAuth();
   const { username } = useParams(); // Get UID
 
   // Identify who owns the profile we are viewing
+  // Allow view if username exists (Guest) OR if currentUser exists (Owner view own)
   const targetUid = username || currentUser?.uid;
-  const isOwner = currentUser?.uid === targetUid;
+
+  // Strict check: User must be logged in AND IDs must match to be owner
+  const isOwner =
+    currentUser?.uid && targetUid && currentUser.uid === targetUid;
+
   const effectiveEditMode = isOwner && isEditMode;
 
   // Highlighting Logic
@@ -72,6 +84,9 @@ export default function LiquidGlassUserProjects() {
       return () => clearTimeout(timer);
     }
   }, [location]);
+
+  // NEW: Track which project is showing the login prompt
+  const [loginPromptProjectId, setLoginPromptProjectId] = useState(null);
 
   const [projects, setProjects] = useState([]);
   // NEW: Separate states for owned vs. collaborated projects to merge them later
@@ -254,7 +269,12 @@ export default function LiquidGlassUserProjects() {
 
   const handleLike = async (e, project) => {
     e.stopPropagation();
-    if (!currentUser) return;
+
+    // NEW: Show beautiful in-card prompt instead of alert
+    if (!currentUser) {
+      setLoginPromptProjectId(project.id);
+      return;
+    }
 
     try {
       // Just call the service. The onSnapshot listener will update the UI.
@@ -429,6 +449,15 @@ export default function LiquidGlassUserProjects() {
                 currentUser={currentUser}
                 isHighlighted={project.id === highlightedId}
                 isEditMode={effectiveEditMode}
+                showLoginPrompt={loginPromptProjectId === project.id} // NEW
+                onLoginRedirect={(e) => {
+                  e.stopPropagation();
+                  navigate("/login");
+                }} // NEW
+                onCloseLoginPrompt={(e) => {
+                  e.stopPropagation();
+                  setLoginPromptProjectId(null);
+                }} // NEW
                 onClick={() => handleOpenView(project)}
                 onEdit={(e) => handleOpenEdit(e, project)}
                 onDelete={(e) => handleDeleteClick(e, project.id)}
@@ -442,6 +471,15 @@ export default function LiquidGlassUserProjects() {
                 currentUser={currentUser}
                 isHighlighted={project.id === highlightedId}
                 isEditMode={effectiveEditMode}
+                showLoginPrompt={loginPromptProjectId === project.id} // NEW
+                onLoginRedirect={(e) => {
+                  e.stopPropagation();
+                  navigate("/login");
+                }} // NEW
+                onCloseLoginPrompt={(e) => {
+                  e.stopPropagation();
+                  setLoginPromptProjectId(null);
+                }} // NEW
                 onClick={() => handleOpenView(project)}
                 onEdit={(e) => handleOpenEdit(e, project)}
                 onDelete={(e) => handleDeleteClick(e, project.id)}
@@ -544,6 +582,9 @@ const ProjectGridCard = ({
   isEditMode,
   isHighlighted,
   currentUser,
+  showLoginPrompt, // NEW
+  onLoginRedirect, // NEW
+  onCloseLoginPrompt, // NEW
   onClick,
   onEdit,
   onDelete,
@@ -658,7 +699,7 @@ const ProjectGridCard = ({
             <div className="flex items-center gap-3">
               <button
                 onClick={onLike}
-                disabled={!currentUser}
+                // Removed disabled prop so guests get the alert message
                 className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${
                   isLiked
                     ? "text-blue-500"
@@ -706,6 +747,33 @@ const ProjectGridCard = ({
           </div>
         </div>
       </div>
+
+      {/* NEW: Login Prompt Overlay */}
+      {showLoginPrompt && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-900/95 backdrop-blur-sm animate-in fade-in duration-200 p-6 text-center border-2 border-orange-500/50 rounded-2xl">
+          <div className="w-12 h-12 bg-orange-500/20 rounded-full flex items-center justify-center mb-3">
+            <LogIn className="text-orange-500" size={24} />
+          </div>
+          <h4 className="text-lg font-bold text-white mb-1">Sign in to Like</h4>
+          <p className="text-sm text-gray-400 mb-6">
+            Join the community to interact with projects.
+          </p>
+          <div className="flex gap-3 w-full">
+            <button
+              onClick={onCloseLoginPrompt}
+              className="flex-1 py-2 rounded-xl text-sm font-semibold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onLoginRedirect}
+              className="flex-1 py-2 rounded-xl text-sm font-semibold text-white bg-orange-600 hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20"
+            >
+              Login
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -715,6 +783,9 @@ const ProjectListCard = ({
   isEditMode,
   isHighlighted,
   currentUser,
+  showLoginPrompt, // NEW
+  onLoginRedirect, // NEW
+  onCloseLoginPrompt, // NEW
   onClick,
   onEdit,
   onDelete,
@@ -870,6 +941,35 @@ const ProjectListCard = ({
           </div>
         </div>
       </div>
+
+      {/* NEW: Login Prompt Overlay (List View) */}
+      {showLoginPrompt && (
+        <div className="absolute inset-0 z-50 flex flex-row items-center justify-between bg-gray-900/95 backdrop-blur-sm animate-in fade-in duration-200 px-6 py-2 border-2 border-orange-500/50 rounded-2xl">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-orange-500/20 rounded-full flex items-center justify-center flex-shrink-0">
+              <LogIn className="text-orange-500" size={20} />
+            </div>
+            <div className="text-left">
+              <h4 className="text-sm font-bold text-white">Sign in to Like</h4>
+              <p className="text-xs text-gray-400">Please login to continue.</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={onCloseLoginPrompt}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onLoginRedirect}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-orange-600 hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20"
+            >
+              Login
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
