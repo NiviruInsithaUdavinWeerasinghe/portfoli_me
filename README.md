@@ -4,9 +4,9 @@
   <p><strong>Build a Professional Portfolio Without Writing Code.</strong></p>
 
   <p>
-  <a href="https://portfolime-roan.vercel.app/">
-    <img src="https://img.shields.io/badge/Website-Visit%20Live%20Demo-black?style=flat&logo=vercel" alt="Live Demo" />
-  </a>
+    <a href="https://portfolime-roan.vercel.app/">
+      <img src="https://img.shields.io/badge/🚀_View_Live_Demo-Portfoli.Me-f97316?style=for-the-badge&logo=vercel&logoColor=white" alt="Live Demo" />
+    </a>
 </p>
 
   <p>
