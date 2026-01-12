@@ -4,7 +4,6 @@
   <p><strong>Build a Professional Portfolio Without Writing Code.</strong></p>
 
   <p>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
     <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-v19-blue" alt="React"></a>
     <a href="https://firebase.google.com/"><img src="https://img.shields.io/badge/Firebase-Enabled-orange" alt="Firebase"></a>
   </p>
