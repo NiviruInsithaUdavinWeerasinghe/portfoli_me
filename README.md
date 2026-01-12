@@ -18,7 +18,7 @@
 
 | Theme: Cyberpunk | Theme: Skeuomorphism |
 |:---:|:---:|
-| ![Cyberpunk Theme] | ![Skeuomorphism Theme]<img width="1919" height="1047" alt="image" src="https://github.com/user-attachments/assets/2ee0062b-4ead-4f21-a84e-7cee1a876417" /> |
+| ![Cyberpunk Theme]<img width="1919" height="1040" alt="Screenshot 2026-01-12 104908" src="https://github.com/user-attachments/assets/0ff57f0e-c654-47c0-8cc2-920a52e4a4af" />| ![Skeuomorphism Theme]<img width="1919" height="1047" alt="image" src="https://github.com/user-attachments/assets/2ee0062b-4ead-4f21-a84e-7cee1a876417" /> |
 
 ---
 
