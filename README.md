@@ -4,6 +4,12 @@
   <p><strong>Build a Professional Portfolio Without Writing Code.</strong></p>
 
   <p>
+    <a href="https://portfolime-roan.vercel.app/">
+      <img src="https://img.shields.io/badge/Live_Demo-Online-green?style=for-the-badge&logo=vercel" alt="Live Demo" />
+    </a>
+  </p>
+
+  <p>
     <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-v19-blue" alt="React"></a>
     <a href="https://firebase.google.com/"><img src="https://img.shields.io/badge/Firebase-Enabled-orange" alt="Firebase"></a>
   </p>
@@ -77,7 +83,7 @@ Switch between completely different visual identities with a single click. The c
 * **Icons:** Lucide React
 * **Backend / DB:** Firebase Firestore
 * **Auth:** Firebase Authentication
-* **Deployment:** (Add your deployment platform here, e.g., Vercel/Netlify)
+* **Deployment:** Vercel
 
 ---
 
