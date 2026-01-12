@@ -4,10 +4,10 @@
   <p><strong>Build a Professional Portfolio Without Writing Code.</strong></p>
 
   <p>
-    <a href="https://portfolime-roan.vercel.app/">
-      <img src="https://img.shields.io/badge/Live_Demo-Online-green?style=for-the-badge&logo=vercel" alt="Live Demo" />
-    </a>
-  </p>
+  <a href="https://portfolime-roan.vercel.app/">
+    <img src="https://img.shields.io/badge/Website-Visit%20Live%20Demo-black?style=flat&logo=vercel" alt="Live Demo" />
+  </a>
+</p>
 
   <p>
     <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-v19-blue" alt="React"></a>
