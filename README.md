@@ -1,4 +1,4 @@
-<img width="1919" height="1043" alt="Screenshot 2026-01-12 102350" src="https://github.com/user-attachments/assets/0f972d1d-9a0f-457e-a00f-3fd631bf7817" /><img width="1919" height="1043" alt="image" src="https://github.com/user-attachments/assets/b721c08a-d120-48b5-a31f-0d4658b1c78c" /># PortfoliMe 🎨✨
+<img width="1024" height="1024" alt="unnamed-Photoroom" src="https://github.com/user-attachments/assets/fcf12042-8111-42ff-9dd1-35efd7c61177" /># PortfoliMe 🎨✨
 
 **Build a Professional Portfolio Without Writing Code.**
 
@@ -18,7 +18,7 @@
 
 | Theme: Cyberpunk | Theme: Skeuomorphism |
 |:---:|:---:|
-| ![Cyberpunk Theme](path/to/cyberpunk-image.png) | ![Skeuomorphism Theme]<img width="1919" height="1047" alt="image" src="https://github.com/user-attachments/assets/2ee0062b-4ead-4f21-a84e-7cee1a876417" /> |
+| ![Cyberpunk Theme] | ![Skeuomorphism Theme]<img width="1919" height="1047" alt="image" src="https://github.com/user-attachments/assets/2ee0062b-4ead-4f21-a84e-7cee1a876417" /> |
 
 ---
 
