@@ -51,14 +51,23 @@ Switch between completely different visual identities with a single click. The c
 * **Experience Timeline:** A visual journey of work history, internships, and education.
 * **Project Showcase:** Detailed case studies, image uploads, and links to GitHub repositories or live demos.
 
+### 🤝 Social & Collaboration
+* **Collaborator Credits:** Tag other users as collaborators on your projects. The project will automatically appear on their profile's project section as well.
+* **Appreciation System:** "Like" projects to show support and appreciation for fellow creators.
+* **Advanced Commenting:** A beautiful, modal-based commenting system featuring:
+    * **Threaded Replies:** Supports up to 3 levels of nested conversations.
+    * **Smart Layout:** Includes "Show More" functionality for long threads to maintain design integrity.
+    * **Full Control:** Users can edit or delete their own comments and replies.
+
 ### 🌍 Community & Discovery
 * **Public Directory:** A built-in search engine to discover other designers and developers by name or role.
 * **Profile Analytics:** Tracks unique views on user profiles so you know when your portfolio is getting traffic.
 * **Live Presence:** Real-time online/offline status indicators.
 
-### 🔐 Authentication & Security
-* Secure login via **Google**, **GitHub**, **Twitter/X**, or standard Email/Password.
-* Powered by Firebase Authentication and Firestore Security Rules.
+### 🔐 Security & Ownership
+* **User-Managed Access:** Users generate and manage their own GitHub Personal Access Tokens, ensuring full control over permissions.
+* **Secure Storage:** GitHub tokens are hashed and securely handled to prevent unauthorized access.
+* **Robust Authentication:** Powered by Firebase Authentication and enforced via strict Firestore Security Rules.
 
 ---
 
