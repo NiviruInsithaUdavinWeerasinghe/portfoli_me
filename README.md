@@ -1,10 +1,14 @@
-<img width="1024" height="1024" alt="unnamed-Photoroom" src="https://github.com/user-attachments/assets/fcf12042-8111-42ff-9dd1-35efd7c61177" /># PortfoliMe 🎨✨
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/fcf12042-8111-42ff-9dd1-35efd7c61177" width="150" alt="PortfoliMe Logo" />
+  <h1>PortfoliMe 🎨✨</h1>
+  <p><strong>Build a Professional Portfolio Without Writing Code.</strong></p>
 
-**Build a Professional Portfolio Without Writing Code.**
-
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![React](https://img.shields.io/badge/React-v19-blue)](https://react.dev/)
-[![Firebase](https://img.shields.io/badge/Firebase-Enabled-orange)](https://firebase.google.com/)
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+    <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-v19-blue" alt="React"></a>
+    <a href="https://firebase.google.com/"><img src="https://img.shields.io/badge/Firebase-Enabled-orange" alt="Firebase"></a>
+  </p>
+</div>
 
 > **PortfoliMe** is a React-based platform designed to help developers, designers, and creatives build stunning, professional portfolios in minutes. Focus on your work and skills—we handle the deployment, design, and structure.
 
@@ -14,11 +18,11 @@
 
 | Landing Page | Portfolio View |
 |:---:|:---:|
-| ![Landing Page Preview]<img width="1919" height="1046" alt="Screenshot 2026-01-12 102031" src="https://github.com/user-attachments/assets/e82dffd6-dd49-4185-a6ae-540fd3db10a2" /> | ![Portfolio Preview]<img width="1919" height="1043" alt="image" src="https://github.com/user-attachments/assets/c3dbc3b9-446b-4542-b9f4-9164704dfae1" />|
+| <img src="https://github.com/user-attachments/assets/e82dffd6-dd49-4185-a6ae-540fd3db10a2" alt="Landing Page Preview" width="100%" /> | <img src="https://github.com/user-attachments/assets/c3dbc3b9-446b-4542-b9f4-9164704dfae1" alt="Portfolio Preview" width="100%" /> |
 
 | Theme: Cyberpunk | Theme: Skeuomorphism |
 |:---:|:---:|
-| ![Cyberpunk Theme]<img width="1919" height="1040" alt="Screenshot 2026-01-12 104908" src="https://github.com/user-attachments/assets/0ff57f0e-c654-47c0-8cc2-920a52e4a4af" />| ![Skeuomorphism Theme]<img width="1919" height="1047" alt="image" src="https://github.com/user-attachments/assets/2ee0062b-4ead-4f21-a84e-7cee1a876417" /> |
+| <img src="https://github.com/user-attachments/assets/0ff57f0e-c654-47c0-8cc2-920a52e4a4af" alt="Cyberpunk Theme" width="100%" /> | <img src="https://github.com/user-attachments/assets/2ee0062b-4ead-4f21-a84e-7cee1a876417" alt="Skeuomorphism Theme" width="100%" /> |
 
 ---
 
@@ -41,7 +45,7 @@ Switch between completely different visual identities with a single click. The c
 ### 🛠 No-Code Content Management
 * **Skill Proficiency:** Categorize tech stacks (Frontend, Backend, etc.) and set proficiency levels with auto-generated visual bars.
 * **Experience Timeline:** A visual journey of work history, internships, and education.
-* **Project Showcase:** detailed case studies, image uploads, and links to GitHub repositories or live demos.
+* **Project Showcase:** Detailed case studies, image uploads, and links to GitHub repositories or live demos.
 
 ### 🌍 Community & Discovery
 * **Public Directory:** A built-in search engine to discover other designers and developers by name or role.
