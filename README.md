@@ -7,7 +7,7 @@
     <a href="https://portfolime-roan.vercel.app/">
       <img src="https://img.shields.io/badge/🚀_View_Live_Demo-Portfoli.Me-f97316?style=for-the-badge&logo=vercel&logoColor=white" alt="Live Demo" />
     </a>
-</p>
+  </p>
 
   <p>
     <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-v19-blue" alt="React"></a>
@@ -31,7 +31,7 @@
 
 | Community Showcase, View Profiles & Comment | Visual Project Builder |
 |:---:|:---:|
-| <img src="https://github.com/user-attachments/assets/65c7f9c8-50af-4697-b134-b0a568b647cb" alt="Community Directory" width="100%" /><br/><br/><img src="https://github.com/user-attachments/assets/173fe753-fb9f-460a-b6f7-c5c2535fcfa7" alt="Profile View" width="100%" /><br/><br/><img src="https://github.com/user-attachments/assets/e7af1b36-5680-4e2f-be25-f0ff16f9b886" alt="Comments" width="100%" /> | <img src="https://github.com/user-attachments/assets/ddb66942-bbfc-48b2-afbf-19acd0a7479a" alt="Add Projects" width="100%" /><br/><br/><img src="https://github.com/user-attachments/assets/dafe0a46-b68b-4721-a2cf-c48a975deed4" alt="Edit Projects" width="100%" /><br/><br/><img src="https://github.com/user-attachments/assets/0ea589f3-9359-44b1-9e17-24c435fe8aa9" alt="Manage Projects" width="100%" /> |
+| <img src="https://github.com/user-attachments/assets/65c7f9c8-50af-4697-b134-b0a568b647cb" alt="Community Directory" width="100%" /><br/><br/><img src="https://github.com/user-attachments/assets/173fe753-fb9f-460a-b6f7-c5c2535fcfa7" alt="Profile View" width="100%" /><br/><br/><img src="https://github.com/user-attachments/assets/d446c0ac-bb6d-4ecd-b347-e27c7e934bc2" alt="Comments Modal" width="48%" /> <img src="https://github.com/user-attachments/assets/d9607608-18aa-4b7b-a74b-6210db8ba3f5" alt="Threads View" width="48%" /> | <img src="https://github.com/user-attachments/assets/ddb66942-bbfc-48b2-afbf-19acd0a7479a" alt="Add Projects" width="100%" /><br/><br/><img src="https://github.com/user-attachments/assets/dafe0a46-b68b-4721-a2cf-c48a975deed4" alt="Edit Projects" width="100%" /><br/><br/><img src="https://github.com/user-attachments/assets/0ea589f3-9359-44b1-9e17-24c435fe8aa9" alt="Manage Projects" width="100%" /> |
 
 ---
 
