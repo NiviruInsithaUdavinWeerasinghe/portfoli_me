@@ -1,4 +1,4 @@
-# PortfoliMe 🎨✨
+<img width="1919" height="1043" alt="Screenshot 2026-01-12 102350" src="https://github.com/user-attachments/assets/0f972d1d-9a0f-457e-a00f-3fd631bf7817" /><img width="1919" height="1043" alt="image" src="https://github.com/user-attachments/assets/b721c08a-d120-48b5-a31f-0d4658b1c78c" /># PortfoliMe 🎨✨
 
 **Build a Professional Portfolio Without Writing Code.**
 
@@ -16,7 +16,7 @@
 
 | Landing Page | Portfolio View |
 |:---:|:---:|
-| ![Landing Page Preview]<img width="1919" height="1046" alt="Screenshot 2026-01-12 102031" src="https://github.com/user-attachments/assets/e82dffd6-dd49-4185-a6ae-540fd3db10a2" /> | ![Portfolio Preview](path/to/portfolio-image.png) |
+| ![Landing Page Preview]<img width="1919" height="1046" alt="Screenshot 2026-01-12 102031" src="https://github.com/user-attachments/assets/e82dffd6-dd49-4185-a6ae-540fd3db10a2" /> | ![Portfolio Preview]<img width="1919" height="1043" alt="image" src="https://github.com/user-attachments/assets/c3dbc3b9-446b-4542-b9f4-9164704dfae1" />|
 
 | Theme: Cyberpunk | Theme: Liquid Glass |
 |:---:|:---:|
