@@ -24,6 +24,10 @@
 |:---:|:---:|
 | <img src="https://github.com/user-attachments/assets/0ff57f0e-c654-47c0-8cc2-920a52e4a4af" alt="Cyberpunk Theme" width="100%" /> | <img src="https://github.com/user-attachments/assets/2ee0062b-4ead-4f21-a84e-7cee1a876417" alt="Skeuomorphism Theme" width="100%" /> |
 
+| Community Showcase | Visual Project Builder |
+|:---:|:---:|
+| <img src="https://github.com/user-attachments/assets/65c7f9c8-50af-4697-b134-b0a568b647cb" alt="Community Directory" width="100%" /> | <img src="https://github.com/user-attachments/assets/ddb66942-bbfc-48b2-afbf-19acd0a7479a" alt="Add Projects" width="100%" /><br/><br/><img src="https://github.com/user-attachments/assets/dafe0a46-b68b-4721-a2cf-c48a975deed4" alt="Edit Projects" width="100%" /><br/><br/><img src="https://github.com/user-attachments/assets/0ea589f3-9359-44b1-9e17-24c435fe8aa9" alt="Manage Projects" width="100%" /> |
+
 ---
 
 ## 🚀 What is PortfoliMe?
