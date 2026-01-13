@@ -865,9 +865,11 @@ const ProjectGridCard = ({
           </span>
           {/* NEW: Clear indication if hidden */}
           {isHiddenForMe && (
-            <div className="flex items-center gap-1 pl-1.5 border-l border-white/20 ml-1.5 text-gray-400">
-              <EyeOff size={10} />
-              <span className="text-[9px] font-medium uppercase">Hidden</span>
+            <div className="flex items-center gap-1 pl-2 border-l border-white/20 ml-2 text-orange-400 animate-pulse">
+              <EyeOff size={10} strokeWidth={3} />
+              <span className="text-[9px] font-bold uppercase tracking-wide">
+                Hidden
+              </span>
             </div>
           )}
         </div>
@@ -879,10 +881,10 @@ const ProjectGridCard = ({
             <button
               onClick={onToggleVisibility}
               title={isHiddenForMe ? "Make Visible" : "Hide from others"}
-              className={`p-1.5 sm:p-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-lg hover:scale-105 transition-all ${
+              className={`p-1.5 sm:p-2 backdrop-blur-md border rounded-lg hover:scale-105 transition-all ${
                 isHiddenForMe
-                  ? "text-gray-500 hover:text-white"
-                  : "text-white hover:text-gray-300"
+                  ? "bg-orange-500/20 border-orange-500/50 text-orange-500 hover:bg-orange-500 hover:text-white"
+                  : "bg-black/40 border-white/10 text-white hover:text-gray-300"
               }`}
             >
               {isHiddenForMe ? (
@@ -1142,7 +1144,7 @@ const ProjectListCard = ({
               <Calendar size={10} /> {dateString}
               {/* NEW: Indicator in list view */}
               {isHiddenForMe && (
-                <span className="flex items-center gap-1 ml-2 px-1.5 py-0.5 rounded bg-white/5 border border-white/5 text-gray-400 text-[8px] uppercase font-bold">
+                <span className="flex items-center gap-1 ml-2 px-1.5 py-0.5 rounded bg-orange-500/10 border border-orange-500/30 text-orange-400 text-[8px] uppercase font-bold shadow-[0_0_10px_rgba(249,115,22,0.1)]">
                   <EyeOff size={8} /> Hidden
                 </span>
               )}
@@ -1155,10 +1157,10 @@ const ProjectListCard = ({
               <button
                 onClick={onToggleVisibility}
                 title={isHiddenForMe ? "Make Visible" : "Hide from others"}
-                className={`p-1 ${
+                className={`p-1 transition-colors ${
                   isHiddenForMe
-                    ? "text-gray-600 hover:text-white"
-                    : "text-gray-400 hover:text-gray-200"
+                    ? "text-orange-500 hover:text-orange-400"
+                    : "text-gray-400 hover:text-white"
                 }`}
               >
                 {isHiddenForMe ? <EyeOff size={12} /> : <Eye size={12} />}
