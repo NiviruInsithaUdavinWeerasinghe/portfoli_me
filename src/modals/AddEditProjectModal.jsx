@@ -673,7 +673,13 @@ export default function AddEditProjectModal({
   const handleDragOverUpload = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(true);
+    // FIX: Only trigger overlay if dragging external Files (ignores internal reordering)
+    if (
+      e.dataTransfer.types &&
+      Array.from(e.dataTransfer.types).includes("Files")
+    ) {
+      setIsDragging(true);
+    }
   };
 
   const handleDragLeaveUpload = (e) => {
@@ -689,6 +695,7 @@ export default function AddEditProjectModal({
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
+    // Standard file drop check
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) processFiles(files);
   };
@@ -1296,32 +1303,61 @@ export default function AddEditProjectModal({
                     <button
                       type="button"
                       onClick={() => setShowMediaHelp(!showMediaHelp)}
-                      className="flex items-center gap-1.5 text-xs font-medium text-amber-500 hover:text-amber-400 transition-colors"
+                      // UPDATED: Switched to Amber, increased border opacity and font weight for visibility
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/50 rounded-full text-xs font-bold text-amber-500 hover:bg-amber-500/20 transition-all"
                     >
                       <Info size={14} />
-                      <span>Click media to preview</span>
+                      <span>Media Tips</span>
                     </button>
 
                     {showMediaHelp && (
-                      <div className="absolute top-full left-0 mt-2 z-20 w-64 p-3 bg-[#0B1120] border border-white/10 rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-                        <ul className="space-y-2 text-xs text-gray-400">
-                          <li className="flex gap-2">
+                      // UPDATED: Wider container, more padding
+                      <div className="absolute top-full left-0 mt-2 z-20 w-72 p-4 bg-[#0F1623] border border-white/10 rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-200 ring-1 ring-white/5">
+                        <ul className="space-y-3 text-xs text-gray-300">
+                          {/* NEW: Upload Method Info */}
+                          <li className="flex gap-2.5 items-start">
+                            <UploadCloud
+                              size={14}
+                              className="mt-0.5 text-white flex-shrink-0"
+                            />
+                            <span>
+                              Add files via <b>Button</b>, <b>Drag & Drop</b>,
+                              or <b>Copy Paste</b>.
+                            </span>
+                          </li>
+                          {/* UPDATED: Hover instruction added */}
+                          <li className="flex gap-2.5 items-start">
                             <Star
-                              size={12}
-                              className="mt-0.5 text-orange-500"
+                              size={14}
+                              className="mt-0.5 text-orange-500 flex-shrink-0"
                             />
-                            <span>Click star to set project cover</span>
+                            <span>
+                              <b>Hover over media</b> & click star to set cover.
+                            </span>
                           </li>
-                          <li className="flex gap-2">
+                          <li className="flex gap-2.5 items-start">
                             <GripVertical
-                              size={12}
-                              className="mt-0.5 text-gray-500"
+                              size={14}
+                              className="mt-0.5 text-gray-500 flex-shrink-0"
                             />
-                            <span>Drag and drop to re-arrange</span>
+                            <span>Drag and drop to re-arrange.</span>
                           </li>
-                          <li className="flex gap-2">
-                            <Edit size={12} className="mt-0.5 text-blue-500" />
-                            <span>Use 'Edit Details' to set titles</span>
+                          {/* NEW: Instruction for Edit Details */}
+                          <li className="flex gap-2.5 items-start">
+                            <Edit
+                              size={14}
+                              className="mt-0.5 text-blue-400 flex-shrink-0"
+                            />
+                            <span>
+                              Click <b>Edit Details</b> to add titles/captions.
+                            </span>
+                          </li>
+                          <li className="flex gap-2.5 items-start">
+                            <Info
+                              size={14}
+                              className="mt-0.5 text-amber-500 flex-shrink-0"
+                            />
+                            <span>Click media to preview full size.</span>
                           </li>
                         </ul>
                       </div>
