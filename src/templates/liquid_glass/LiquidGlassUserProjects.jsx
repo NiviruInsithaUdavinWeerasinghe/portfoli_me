@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import { createPortal } from "react-dom"; // NEW: Imported createPortal
 import {
   useOutletContext,
@@ -22,6 +28,7 @@ import {
   Clock,
   ThumbsUp,
   MessageSquare,
+  Info,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -87,6 +94,26 @@ export default function LiquidGlassUserProjects() {
 
   // NEW: Track which project is showing the login prompt
   const [loginPromptProjectId, setLoginPromptProjectId] = useState(null);
+
+  // NEW: State for Page Tips Dropdown
+  const [showPageTips, setShowPageTips] = useState(false);
+  const tipsRef = useRef(null); // Ref for click outside detection
+
+  // Close tips when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (tipsRef.current && !tipsRef.current.contains(event.target)) {
+        setShowPageTips(false);
+      }
+    };
+
+    if (showPageTips) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showPageTips]);
 
   const [projects, setProjects] = useState([]);
   // NEW: Separate states for owned vs. collaborated projects to merge them later
@@ -334,9 +361,61 @@ export default function LiquidGlassUserProjects() {
       <div className="flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center">
         {/* FIXED: Removed 'whitespace-nowrap' so text can wrap naturally on small mobile screens instead of being cut off */}
         <div>
-          <h2 className="text-3xl font-bold text-white mb-2 tracking-tight">
-            Projects
-          </h2>
+          <div className="flex items-center gap-3 mb-2">
+            <h2 className="text-3xl font-bold text-white tracking-tight">
+              Projects
+            </h2>
+            {/* NEW: Page Tips Button */}
+            {/* UPDATED: Added ref={tipsRef} here so the click-outside logic knows what element to track */}
+            <div className="relative" ref={tipsRef}>
+              <button
+                onClick={() => setShowPageTips(!showPageTips)}
+                className="p-1.5 rounded-full bg-white/5 border border-white/10 text-gray-400 hover:text-orange-500 hover:bg-orange-500/10 transition-colors"
+                title="Page Tips"
+              >
+                <Info size={16} />
+              </button>
+              {showPageTips && (
+                /* UPDATED: Added centered positioning for mobile (left-1/2 -translate-x-1/2) */
+                <div className="absolute top-full left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 mt-2 z-30 w-64 p-4 bg-[#0F1623] border border-white/10 rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                  <h4 className="text-xs font-bold text-white uppercase mb-2 tracking-wider">
+                    Quick Tips
+                  </h4>
+                  <ul className="space-y-2 text-xs text-gray-400">
+                    <li className="flex gap-2">
+                      <Search size={12} className="mt-0.5 text-blue-400" />
+                      <span>
+                        Search also filters by <b>Tags</b>.
+                      </span>
+                    </li>
+                    <li className="flex gap-2">
+                      <ExternalLink
+                        size={12}
+                        className="mt-0.5 text-orange-400"
+                      />
+                      <span>
+                        Click card to view <b>Media & Details</b>.
+                      </span>
+                    </li>
+                    {effectiveEditMode && (
+                      <li className="flex gap-2">
+                        <Edit2 size={12} className="mt-0.5 text-green-400" />
+                        <span>
+                          <b>Hover</b> over image to Edit/Delete in desktops.
+                        </span>
+                      </li>
+                    )}
+                    <li className="flex gap-2">
+                      <ThumbsUp size={12} className="mt-0.5 text-purple-400" />
+                      <span>
+                        Login to <b>Like & Comment</b>.
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
           <p className="text-gray-400">
             Manage and showcase your technical achievements.
           </p>
@@ -437,7 +516,7 @@ export default function LiquidGlassUserProjects() {
         <div
           className={
             viewMode === "grid"
-              ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
+              ? "grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6"
               : "flex flex-col gap-4"
           }
         >
@@ -623,13 +702,15 @@ const ProjectGridCard = ({
         }
       `}
     >
-      <div className="relative h-48 overflow-hidden">
+      {/* Reduced height on mobile (h-32) so 2 columns don't look like skyscrapers */}
+      <div className="relative h-32 sm:h-48 overflow-hidden">
         <img
           src={project.image || "https://via.placeholder.com/400"}
           alt={project.title}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
-        <div className="absolute top-3 left-3 px-2.5 py-1 bg-black/40 backdrop-blur-md border border-white/10 rounded-lg flex items-center gap-1.5">
+        {/* UPDATED: Moved status to bottom-3 left-3 so it doesn't collide with top-right edit buttons */}
+        <div className="absolute bottom-3 left-3 px-2.5 py-1 bg-black/40 backdrop-blur-md border border-white/10 rounded-lg flex items-center gap-1.5">
           {project.status === "Completed" ? (
             <CheckCircle2 size={12} className="text-green-400" />
           ) : (
@@ -645,43 +726,49 @@ const ProjectGridCard = ({
           <div className="absolute top-3 right-3 flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
             <button
               onClick={onEdit}
-              className="p-2 bg-black/40 backdrop-blur-md border border-white/10 text-white hover:text-orange-400 rounded-lg hover:scale-105 transition-all"
+              className="p-1.5 sm:p-2 bg-black/40 backdrop-blur-md border border-white/10 text-white hover:text-orange-400 rounded-lg hover:scale-105 transition-all"
             >
-              <Edit2 size={14} />
+              <Edit2 size={12} className="sm:w-[14px] sm:h-[14px]" />
             </button>
             <button
               onClick={onDelete}
-              className="p-2 bg-black/40 backdrop-blur-md border border-white/10 text-red-400 hover:text-red-500 rounded-lg hover:scale-105 transition-all"
+              className="p-1.5 sm:p-2 bg-black/40 backdrop-blur-md border border-white/10 text-red-400 hover:text-red-500 rounded-lg hover:scale-105 transition-all"
             >
-              <Trash2 size={14} />
+              <Trash2 size={12} className="sm:w-[14px] sm:h-[14px]" />
             </button>
           </div>
         )}
       </div>
-      <div className="p-6 flex flex-col flex-grow">
+      {/* Reduced padding (p-3) on mobile to save vertical space */}
+      <div className="p-3 sm:p-6 flex flex-col flex-grow">
         {dateString && (
-          <div className="flex items-center gap-2 mb-3 text-xs text-gray-500 font-medium">
-            <Calendar size={14} /> {dateString}
+          <div className="flex items-center gap-2 mb-2 sm:mb-3 text-[10px] sm:text-xs text-gray-500 font-medium">
+            <Calendar size={12} className="sm:w-[14px] sm:h-[14px]" />{" "}
+            {dateString}
           </div>
         )}
 
         <h3
           title={project.title}
-          className="text-lg font-bold text-white mb-2 group-hover:text-orange-500 transition-colors truncate"
+          // Smaller font on mobile
+          className="text-sm sm:text-lg font-bold text-white mb-1.5 sm:mb-2 group-hover:text-orange-500 transition-colors truncate"
         >
           {project.title}
         </h3>
         <div
-          className="text-gray-400 text-sm mb-6 line-clamp-3 flex-grow break-all [&_p]:inline [&_ul]:inline [&_ol]:inline"
+          // Tighter line clamp (2 lines) and smaller text on mobile
+          // UPDATED: Added 'overflow-hidden' and explicit line-heights (leading-4/leading-5) to match the fixed height calculations exactly.
+          // Added '[&_*]:m-0 [&_*]:p-0' to strip any margins/padding from the injected HTML content.
+          className="text-gray-400 text-xs sm:text-sm mb-3 sm:mb-6 line-clamp-2 sm:line-clamp-3 h-8 sm:h-[60px] break-words overflow-hidden leading-4 sm:leading-5 [&_*]:inline [&_*]:m-0 [&_*]:p-0"
           dangerouslySetInnerHTML={{ __html: project.description }}
         />
-        <div className="flex flex-col gap-4 pt-4 border-t border-white/5 mt-auto">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-3 sm:gap-4 pt-3 sm:pt-4 border-t border-white/5 mt-auto">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             {visibleTags.map((tag, i) => (
               <span
                 key={i}
                 title={tag.length > CHAR_LIMIT ? tag : ""}
-                className="px-2 py-1 text-[10px] bg-white/5 text-gray-400 rounded border border-white/5 whitespace-nowrap"
+                className="px-1.5 py-0.5 sm:px-2 sm:py-1 text-[9px] sm:text-[10px] bg-white/5 text-gray-400 rounded border border-white/5 whitespace-nowrap"
               >
                 {tag.length > CHAR_LIMIT
                   ? `${tag.substring(0, CHAR_LIMIT)}...`
@@ -689,36 +776,40 @@ const ProjectGridCard = ({
               </span>
             ))}
             {remainingCount > 0 && (
-              <span className="text-[10px] text-orange-500 font-medium whitespace-nowrap">
+              <span className="text-[9px] sm:text-[10px] text-orange-500 font-medium whitespace-nowrap">
                 +{remainingCount} more
               </span>
             )}
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <button
                 onClick={onLike}
                 // Removed disabled prop so guests get the alert message
-                className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${
+                className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-bold transition-colors ${
                   isLiked
                     ? "text-blue-500"
                     : "text-gray-500 hover:text-blue-500"
                 }`}
               >
-                <ThumbsUp size={16} fill={isLiked ? "currentColor" : "none"} />
+                <ThumbsUp
+                  size={14}
+                  className="sm:w-[16px] sm:h-[16px]"
+                  fill={isLiked ? "currentColor" : "none"}
+                />
                 <span>{project.appreciation || 0}</span>
               </button>
               <button
                 onClick={onComment}
-                className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-white transition-colors"
+                className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-bold text-gray-500 hover:text-white transition-colors"
               >
-                <MessageSquare size={16} />
+                <MessageSquare size={14} className="sm:w-[16px] sm:h-[16px]" />
                 <span>{project.commentsCount || 0}</span>
               </button>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {project.githubLink && (
                 <a
                   href={project.githubLink}
@@ -728,7 +819,7 @@ const ProjectGridCard = ({
                   className="text-gray-500 hover:text-white transition-colors"
                   title="View Code"
                 >
-                  <Github size={18} />
+                  <Github size={16} className="sm:w-[18px] sm:h-[18px]" />
                 </a>
               )}
               {project.liveLink && (
@@ -740,7 +831,7 @@ const ProjectGridCard = ({
                   className="text-gray-500 hover:text-orange-500 transition-colors"
                   title="Live Demo"
                 >
-                  <ExternalLink size={18} />
+                  <ExternalLink size={16} className="sm:w-[18px] sm:h-[18px]" />
                 </a>
               )}
             </div>
@@ -750,24 +841,29 @@ const ProjectGridCard = ({
 
       {/* NEW: Login Prompt Overlay */}
       {showLoginPrompt && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-900/95 backdrop-blur-sm animate-in fade-in duration-200 p-6 text-center border-2 border-orange-500/50 rounded-2xl">
-          <div className="w-12 h-12 bg-orange-500/20 rounded-full flex items-center justify-center mb-3">
-            <LogIn className="text-orange-500" size={24} />
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-900/95 backdrop-blur-sm animate-in fade-in duration-200 p-4 sm:p-6 text-center border-2 border-orange-500/50 rounded-2xl">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-500/20 rounded-full flex items-center justify-center mb-2 sm:mb-3">
+            <LogIn
+              className="text-orange-500 sm:w-[24px] sm:h-[24px]"
+              size={20}
+            />
           </div>
-          <h4 className="text-lg font-bold text-white mb-1">Sign in to Like</h4>
-          <p className="text-sm text-gray-400 mb-6">
+          <h4 className="text-sm sm:text-lg font-bold text-white mb-1">
+            Sign in to Like
+          </h4>
+          <p className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6">
             Join the community to interact with projects.
           </p>
-          <div className="flex gap-3 w-full">
+          <div className="flex gap-2 sm:gap-3 w-full">
             <button
               onClick={onCloseLoginPrompt}
-              className="flex-1 py-2 rounded-xl text-sm font-semibold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
+              className="flex-1 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={onLoginRedirect}
-              className="flex-1 py-2 rounded-xl text-sm font-semibold text-white bg-orange-600 hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20"
+              className="flex-1 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold text-white bg-orange-600 hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20"
             >
               Login
             </button>
@@ -816,9 +912,9 @@ const ProjectListCard = ({
   return (
     <div
       onClick={onClick}
-      // FIXED: Force 'flex-row' to keep list layout on mobile. Adjusted spacing.
+      // REDESIGN: Kept flex-row. Added sm:rounded-2xl for responsive radius.
       className={`
-        group flex flex-row backdrop-blur-md rounded-2xl overflow-hidden cursor-pointer transition-all duration-500
+        group flex flex-row backdrop-blur-md rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-500
         ${
           isHighlighted
             ? "bg-gray-900/60 border-2 border-orange-500 shadow-[0_0_40px_rgba(249,115,22,0.4)] scale-[1.01] z-20"
@@ -826,21 +922,38 @@ const ProjectListCard = ({
         }
       `}
     >
-      {/* FIXED: Reduced image width on mobile (w-28) to give text room */}
-      <div className="w-28 sm:w-56 relative flex-shrink-0">
+      {/* REDESIGN: Reduced mobile width (w-24 vs w-28) to help aspect ratio and reduce height */}
+      <div className="w-24 sm:w-56 relative flex-shrink-0">
         <img
           src={project.image || "https://via.placeholder.com/400"}
           alt={project.title}
           className="w-full h-full object-cover absolute inset-0"
         />
+        {/* REDESIGN: Adjusted positioning and sizing of badge for mobile */}
+        <div className="absolute bottom-1.5 left-1.5 sm:bottom-3 sm:left-3 px-1.5 py-0.5 sm:px-2.5 sm:py-1 bg-black/40 backdrop-blur-md border border-white/10 rounded-md sm:rounded-lg flex items-center gap-1 sm:gap-1.5 z-10">
+          {project.status === "Completed" ? (
+            <CheckCircle2
+              size={10}
+              className="text-green-400 sm:w-[12px] sm:h-[12px]"
+            />
+          ) : (
+            <Clock
+              size={10}
+              className="text-orange-500 sm:w-[12px] sm:h-[12px]"
+            />
+          )}
+          <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-wider text-white/90">
+            {project.status}
+          </span>
+        </div>
       </div>
 
-      {/* FIXED: Compact padding (p-3) and optimized layout for mobile */}
-      <div className="flex-1 p-3 sm:p-5 flex flex-col gap-1.5 min-w-0">
+      {/* REDESIGN: Reduced padding (p-2.5) and gap (gap-1) for compact height */}
+      <div className="flex-1 p-2.5 sm:p-5 flex flex-col gap-1 sm:gap-1.5 min-w-0 justify-center">
         {/* Header: Date & Controls */}
         <div className="flex items-center justify-between">
           {dateString && (
-            <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium">
+            <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-gray-500 font-medium">
               <Calendar size={10} /> {dateString}
             </div>
           )}
@@ -871,15 +984,19 @@ const ProjectListCard = ({
           {project.title}
         </h3>
 
-        {/* Description */}
-        <div className="text-[10px] sm:text-sm text-gray-400 line-clamp-2 leading-relaxed">
+        {/* REDESIGN: 
+            1. line-clamp-1 on mobile to prevent height growth.
+            2. text-[10px] for better fit.
+        */}
+        <div className="text-[10px] sm:text-sm text-gray-400 line-clamp-1 sm:line-clamp-2 leading-relaxed">
           <div dangerouslySetInnerHTML={{ __html: project.description }} />
         </div>
 
         {/* Footer: Tags & Stats */}
-        <div className="mt-auto pt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          {/* Tags */}
-          <div className="flex flex-wrap items-center gap-1.5">
+        {/* REDESIGN: border-t hidden on mobile to save space, added mt-1 */}
+        <div className="mt-1 sm:mt-auto pt-1 sm:pt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t border-white/5 sm:border-0">
+          {/* REDESIGN: HIDDEN Tags on mobile. This is the key fix for "too tall". Tags will only show on sm screens. */}
+          <div className="hidden sm:flex flex-wrap items-center gap-1.5">
             {visibleTags.map((tag, i) => (
               <span
                 key={i}
@@ -897,8 +1014,8 @@ const ProjectListCard = ({
             )}
           </div>
 
-          {/* Stats & Links */}
-          <div className="flex items-center justify-between sm:justify-end gap-3 border-t border-white/5 pt-2 sm:pt-0 sm:border-0">
+          {/* Stats & Links - Always visible, pushed to right on mobile via w-full/justify-between */}
+          <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
             <div className="flex items-center gap-2 text-gray-500">
               <button
                 onClick={onLike}
@@ -944,26 +1061,30 @@ const ProjectListCard = ({
 
       {/* NEW: Login Prompt Overlay (List View) */}
       {showLoginPrompt && (
-        <div className="absolute inset-0 z-50 flex flex-row items-center justify-between bg-gray-900/95 backdrop-blur-sm animate-in fade-in duration-200 px-6 py-2 border-2 border-orange-500/50 rounded-2xl">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-orange-500/20 rounded-full flex items-center justify-center flex-shrink-0">
+        <div className="absolute inset-0 z-50 flex flex-row items-center justify-between bg-gray-900/95 backdrop-blur-sm animate-in fade-in duration-200 px-2 sm:px-6 py-2 border-2 border-orange-500/50 rounded-xl sm:rounded-2xl">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="hidden sm:flex w-10 h-10 bg-orange-500/20 rounded-full items-center justify-center flex-shrink-0">
               <LogIn className="text-orange-500" size={20} />
             </div>
             <div className="text-left">
-              <h4 className="text-sm font-bold text-white">Sign in to Like</h4>
-              <p className="text-xs text-gray-400">Please login to continue.</p>
+              <h4 className="text-xs sm:text-sm font-bold text-white">
+                Sign in to Like
+              </h4>
+              <p className="text-[10px] sm:text-xs text-gray-400">
+                Please login to continue.
+              </p>
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2 sm:gap-3">
             <button
               onClick={onCloseLoginPrompt}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
+              className="px-2 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-semibold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={onLoginRedirect}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-orange-600 hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20"
+              className="px-2 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-semibold text-white bg-orange-600 hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20"
             >
               Login
             </button>
