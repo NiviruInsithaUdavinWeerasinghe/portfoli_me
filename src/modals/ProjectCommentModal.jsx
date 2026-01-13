@@ -485,6 +485,20 @@ export default function ProjectCommentModal({
     try {
       await deleteProjectComment(projectOwnerId, project.id, commentId);
       setDeleteConfirmId(null);
+
+      // NEW: Auto-navigate back if this was the last comment in the thread
+      if (navStack.length > 0) {
+        const currentRoot = navStack[navStack.length - 1];
+        // Check comments in current view using the existing 'comments' state closure
+        const commentsInView = comments.filter(
+          (c) => c.parentId === currentRoot.id
+        );
+
+        // If the deleted comment was the only one in this view, go back
+        if (commentsInView.length === 1 && commentsInView[0].id === commentId) {
+          setNavStack((prev) => prev.slice(0, -1));
+        }
+      }
     } catch (error) {
       console.error("Failed to delete comment", error);
     }
@@ -516,6 +530,12 @@ export default function ProjectCommentModal({
     setNavStack((prev) => prev.slice(0, -1));
   };
 
+  // Custom Close Handler: Resets thread view on close
+  const handleModalClose = () => {
+    setNavStack([]);
+    onClose();
+  };
+
   // Determine what to display based on navigation stack
   const currentThreadRoot =
     navStack.length > 0 ? navStack[navStack.length - 1] : null;
@@ -531,7 +551,7 @@ export default function ProjectCommentModal({
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity duration-500 ease-in-out"
-        onClick={onClose}
+        onClick={handleModalClose}
       />
 
       <div className="relative w-full max-w-lg h-[80vh] bg-gray-900/80 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 ease-out ring-1 ring-white/5">
@@ -570,7 +590,7 @@ export default function ProjectCommentModal({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleModalClose}
             className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-all duration-200 hover:rotate-90"
           >
             <X size={20} />

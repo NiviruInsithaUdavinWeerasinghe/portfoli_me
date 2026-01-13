@@ -7,6 +7,7 @@ import {
   getDocs,
   getDoc,
   query,
+  where, // NEW: Added for querying child comments
   orderBy,
   serverTimestamp,
   arrayUnion,
@@ -164,18 +165,31 @@ export const deleteProjectComment = async (
   commentId
 ) => {
   try {
-    const commentRef = doc(
+    const commentsRef = collection(
       db,
       "users",
       projectOwnerId,
       "projects",
       projectId,
-      "comments",
-      commentId
+      "comments"
     );
+
+    // 1. Find all direct replies (children) where parentId matches this comment
+    const q = query(commentsRef, where("parentId", "==", commentId));
+    const snapshot = await getDocs(q);
+
+    // 2. Recursively delete each child first
+    // This ensures that if a child has its own replies, they get deleted too
+    const deletePromises = snapshot.docs.map((doc) =>
+      deleteProjectComment(projectOwnerId, projectId, doc.id)
+    );
+    await Promise.all(deletePromises);
+
+    // 3. Delete the actual comment document
+    const commentRef = doc(commentsRef, commentId);
     await deleteDoc(commentRef);
   } catch (error) {
-    console.error("Error deleting comment:", error);
+    console.error("Error deleting comment and replies:", error);
     throw error;
   }
 };
