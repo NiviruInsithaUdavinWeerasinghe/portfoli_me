@@ -24,7 +24,8 @@ import {
   ListOrdered,
   Link as LinkIcon,
   Info,
-  Users, // NEW: Added Users Icon
+  Users,
+  FileJson, // NEW: Added FileJson Icon
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 // NEW: Added Firestore query functions
@@ -37,6 +38,31 @@ import {
   fetchUserRepositories,
   fetchRepoLanguages,
 } from "../services/githubService";
+import Lottie from "lottie-react"; // NEW: Import Lottie Player
+
+// NEW: Helper component to fetch and play Lottie JSON from a URL
+const LottieRenderer = ({ url, className }) => {
+  const [animationData, setAnimationData] = useState(null);
+
+  useEffect(() => {
+    if (!url) return;
+    fetch(url)
+      .then((res) => res.json())
+      .then((data) => setAnimationData(data))
+      .catch((err) => console.error("Failed to load Lottie:", err));
+  }, [url]);
+
+  if (!animationData)
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-white/5">
+        <Loader2 className="animate-spin text-orange-500" size={16} />
+      </div>
+    );
+
+  return (
+    <Lottie animationData={animationData} loop={true} className={className} />
+  );
+};
 
 export default function AddEditProjectModal({
   isOpen,
@@ -582,25 +608,66 @@ export default function AddEditProjectModal({
     if (name === "startDate" || name === "endDate") setError("");
   };
 
+  // NEW: Helper to validate if a JSON file contains Lottie animation data
+  const validateLottieFile = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          // Lottie files MUST have 'v' (version) and 'layers' keys to be valid
+          if (data && typeof data === "object" && data.v && data.layers) {
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        } catch (err) {
+          resolve(false); // Parse error
+        }
+      };
+      reader.onerror = () => resolve(false); // Read error
+      reader.readAsText(file);
+    });
+  };
+
   // Reusable function to process files from Input, Drop, or Paste
-  const processFiles = (files) => {
+  const processFiles = async (files) => {
     if (files.length === 0) return;
 
-    // VALIDATION: Check for allowed types (Image, Video, PDF)
-    const hasInvalidFiles = files.some((file) => {
+    // 1. Basic MIME/Extension Validation
+    const hasInvalidTypes = files.some((file) => {
       const isImage = file.type.startsWith("image/");
       const isVideo = file.type.startsWith("video/");
       const isPdf =
         file.type === "application/pdf" ||
         file.name.toLowerCase().endsWith(".pdf");
-      return !isImage && !isVideo && !isPdf;
+      const isJson =
+        file.type === "application/json" ||
+        file.name.toLowerCase().endsWith(".json"); // NEW: Support JSON
+      return !isImage && !isVideo && !isPdf && !isJson;
     });
 
-    if (hasInvalidFiles) {
+    if (hasInvalidTypes) {
       setError(
-        "Invalid file type. Only images, videos, gifs, and PDFs are allowed."
+        "Invalid file type. Only images, videos, gifs, PDFs, and Lottie (JSON) files are allowed."
       );
       return;
+    }
+
+    // 2. Advanced Lottie Content Validation
+    // We iterate specifically to check JSON content before allowing upload
+    for (const file of files) {
+      const isJson =
+        file.type === "application/json" ||
+        file.name.toLowerCase().endsWith(".json");
+
+      if (isJson) {
+        const isValidLottie = await validateLottieFile(file);
+        if (!isValidLottie) {
+          setError(`"${file.name}" is not a valid Lottie animation file.`);
+          return; // Stop the upload process immediately
+        }
+      }
     }
 
     setError("");
@@ -866,6 +933,13 @@ export default function AddEditProjectModal({
   };
 
   const renderPreviewItem = (item) => {
+    // NEW: Handle JSON/Lottie files visual
+    // Checks for 'json' type (Cloudinary raw) or .json extension
+    if (item.type === "json" || item.url?.endsWith(".json")) {
+      // Render the actual animation using the helper
+      return <LottieRenderer url={item.url} className="w-full h-full p-1" />;
+    }
+
     const previewUrl = getPreviewUrl(item);
 
     // Render the generated thumbnail for both images and videos
@@ -1008,13 +1082,22 @@ export default function AddEditProjectModal({
                 <ChevronLeft size={32} />
               </button>
             )}
-            <div className="max-w-[90vw] max-h-[85vh] overflow-hidden rounded-lg shadow-2xl">
+            <div className="max-w-[90vw] max-h-[85vh] overflow-hidden rounded-lg shadow-2xl flex items-center justify-center bg-[#0B1120]">
               {previewItem.type === "video" ? (
                 <video
                   src={previewItem.url}
                   controls
                   className="max-w-full max-h-[85vh]"
                 />
+              ) : previewItem.type === "json" ||
+                previewItem.url?.endsWith(".json") ? (
+                // Lottie Full Screen Preview
+                <div className="w-[500px] h-[500px] max-w-[80vw] max-h-[80vh]">
+                  <LottieRenderer
+                    url={previewItem.url}
+                    className="w-full h-full"
+                  />
+                </div>
               ) : (
                 <img
                   src={getPreviewUrl(previewItem)}

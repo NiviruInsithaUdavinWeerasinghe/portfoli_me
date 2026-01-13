@@ -13,10 +13,36 @@ import {
   Play,
   Download,
   Loader,
+  Loader2, // NEW: Added Loader2
   Maximize2, // NEW: Import Maximize icon
   Minimize2, // NEW: Import Minimize icon
   User, // NEW: Import User icon for avatar fallback
 } from "lucide-react";
+import Lottie from "lottie-react"; // NEW: Import Lottie Player
+
+// NEW: Helper component to fetch and play Lottie JSON from a URL
+const LottieRenderer = ({ url, className }) => {
+  const [animationData, setAnimationData] = useState(null);
+
+  useEffect(() => {
+    if (!url) return;
+    fetch(url)
+      .then((res) => res.json())
+      .then((data) => setAnimationData(data))
+      .catch((err) => console.error("Failed to load Lottie:", err));
+  }, [url]);
+
+  if (!animationData)
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <Loader2 className="animate-spin text-orange-500" size={16} />
+      </div>
+    );
+
+  return (
+    <Lottie animationData={animationData} loop={true} className={className} />
+  );
+};
 
 export default function ProjectViewModal({
   project,
@@ -168,12 +194,15 @@ export default function ProjectViewModal({
         {/* --- LEFT SIDE: MEDIA VIEWER --- */}
         {/* FIX: Added 'md:h-96' to increase height specifically on tablet screens */}
         <div className="w-full lg:w-2/3 h-64 md:h-96 lg:h-full shrink-0 bg-black/50 relative flex items-center justify-center overflow-hidden border-b lg:border-b-0 lg:border-r border-white/10 group">
-          {/* Loading Spinner - Shows only when media is NOT loaded and NOT a PDF */}
-          {!isMediaLoaded && !isPdf(currentMedia) && (
-            <div className="absolute inset-0 flex items-center justify-center z-20">
-              <Loader className="w-12 h-12 text-orange-500 animate-spin" />
-            </div>
-          )}
+          {/* Loading Spinner - Shows only when media is NOT loaded, NOT a PDF, and NOT JSON */}
+          {!isMediaLoaded &&
+            !isPdf(currentMedia) &&
+            currentMedia.type !== "json" &&
+            !currentMedia.url?.endsWith(".json") && (
+              <div className="absolute inset-0 flex items-center justify-center z-20">
+                <Loader className="w-12 h-12 text-orange-500 animate-spin" />
+              </div>
+            )}
 
           <div className="w-full h-full flex items-center justify-center p-4">
             {currentMedia.type === "video" ? (
@@ -186,6 +215,15 @@ export default function ProjectViewModal({
                   isMediaLoaded ? "opacity-100" : "opacity-0"
                 }`}
               />
+            ) : currentMedia.type === "json" ||
+              currentMedia.url?.endsWith(".json") ? (
+              // NEW: Lottie Player in Main View
+              <div className="w-full h-full flex items-center justify-center">
+                <LottieRenderer
+                  url={currentMedia.url}
+                  className="w-full h-full max-w-[80%] max-h-[80%]"
+                />
+              </div>
             ) : isPdf(currentMedia) ? (
               // PDF viewer usually handles its own loading UI
               <div className="w-full h-full relative bg-white/5 rounded-lg overflow-hidden flex flex-col">
@@ -277,12 +315,19 @@ export default function ProjectViewModal({
                       : "border-white/20 opacity-60 hover:opacity-100"
                   }`}
                 >
-                  {/* Always render the image thumbnail (works for images, PDFs, and now Videos) */}
-                  <img
-                    src={getThumbnailUrl(m)}
-                    className="w-full h-full object-cover"
-                    alt="thumb"
-                  />
+                  {/* NEW: Handle Lottie Thumbnails vs Image/Video/PDF Thumbnails */}
+                  {m.type === "json" || m.url?.endsWith(".json") ? (
+                    <div className="w-full h-full p-1 bg-black/20">
+                      <LottieRenderer url={m.url} className="w-full h-full" />
+                    </div>
+                  ) : (
+                    <img
+                      src={getThumbnailUrl(m)}
+                      className="w-full h-full object-cover"
+                      alt="thumb"
+                    />
+                  )}
+
                   {/* Overlay Play Icon for Videos */}
                   {m.type === "video" && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/30">
@@ -340,12 +385,12 @@ export default function ProjectViewModal({
                 <div
                   // Updated CSS to support deeper nesting (_) and allow inline styles to work (removed explicit list-style overrides)
                   className="text-gray-400 leading-relaxed font-light break-words 
-                    [&_ul]:list-disc [&_ul]:pl-8 [&_ul]:mb-2 
-                    [&_ol]:list-decimal [&_ol]:pl-8 [&_ol]:mb-2 
-                    [&_li]:pl-1
-                    [&_a]:text-orange-400 [&_a]:underline [&_a]:hover:text-orange-300
-                    [&_b]:font-bold [&_strong]:font-bold
-                    [&_i]:italic [&_em]:italic"
+                  [&_ul]:list-disc [&_ul]:pl-8 [&_ul]:mb-2 
+                  [&_ol]:list-decimal [&_ol]:pl-8 [&_ol]:mb-2 
+                  [&_li]:pl-1
+                  [&_a]:text-orange-400 [&_a]:underline [&_a]:hover:text-orange-300
+                  [&_b]:font-bold [&_strong]:font-bold
+                  [&_i]:italic [&_em]:italic"
                   dangerouslySetInnerHTML={{ __html: project.description }}
                 />
               </div>
@@ -614,6 +659,15 @@ export default function ProjectViewModal({
                   controls
                   className="max-w-full max-h-full rounded-lg shadow-2xl"
                 />
+              ) : currentMedia.type === "json" ||
+                currentMedia.url?.endsWith(".json") ? (
+                // NEW: Lottie Player in Lightbox
+                <div className="w-full h-full flex items-center justify-center max-w-4xl max-h-[80vh]">
+                  <LottieRenderer
+                    url={currentMedia.url}
+                    className="w-full h-full"
+                  />
+                </div>
               ) : isPdf(currentMedia) ? (
                 <div className="w-full h-full bg-white rounded-lg overflow-hidden relative max-w-5xl">
                   <embed

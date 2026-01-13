@@ -21,6 +21,8 @@ import {
   Loader2,
   Trash2,
   Edit2,
+  Eye, // NEW: Icon for visible
+  EyeOff, // NEW: Icon for hidden
   Github,
   ExternalLink,
   Calendar,
@@ -49,6 +51,31 @@ import {
 import AddEditProjectModal from "../../modals/AddEditProjectModal";
 import ProjectViewModal from "../../modals/ProjectViewModal";
 import ProjectCommentModal from "../../modals/ProjectCommentModal";
+import Lottie from "lottie-react"; // NEW: Import Lottie
+
+// NEW: Helper component to fetch and play Lottie JSON from a URL
+const LottieRenderer = ({ url, className }) => {
+  const [animationData, setAnimationData] = useState(null);
+
+  useEffect(() => {
+    if (!url) return;
+    fetch(url)
+      .then((res) => res.json())
+      .then((data) => setAnimationData(data))
+      .catch((err) => console.error("Failed to load Lottie:", err));
+  }, [url]);
+
+  if (!animationData)
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-white/5">
+        <Loader2 className="animate-spin text-orange-500" size={16} />
+      </div>
+    );
+
+  return (
+    <Lottie animationData={animationData} loop={true} className={className} />
+  );
+};
 
 export default function LiquidGlassUserProjects() {
   const navigate = useNavigate(); // NEW: Hook for redirection
@@ -316,6 +343,48 @@ export default function LiquidGlassUserProjects() {
     }
   };
 
+  // NEW: Handle Profile-Specific Visibility
+  const handleToggleVisibility = async (e, project) => {
+    e.stopPropagation();
+    if (!currentUser) return;
+
+    try {
+      // Ensure we are working with an array
+      const currentHiddenBy = Array.isArray(project.hiddenBy)
+        ? project.hiddenBy
+        : [];
+      const isHidden = currentHiddenBy.includes(currentUser.uid);
+
+      console.log(`Toggling Visibility for: ${project.title}`);
+      console.log(`Current HiddenBy Array:`, currentHiddenBy);
+      console.log(`Am I (${currentUser.uid}) in array?`, isHidden);
+
+      // If hidden, remove ID. If visible, add ID.
+      const newHiddenBy = isHidden
+        ? currentHiddenBy.filter((id) => id !== currentUser.uid)
+        : [...currentHiddenBy, currentUser.uid];
+
+      console.log(`New HiddenBy Array to Save:`, newHiddenBy);
+
+      // Update the project in the database
+      // IMPORTANT: We only send { hiddenBy }.
+      // If 'updateProject' in your service replaces the whole document, that is the bug.
+      // But assuming it uses updateDoc (patch), this is safe.
+      console.log(
+        `Saving visibility for [${project.title}] to owner [${
+          project.ownerId || targetUid
+        }]`
+      );
+
+      await updateProject(project.ownerId || targetUid, project.id, {
+        hiddenBy: newHiddenBy,
+      });
+    } catch (error) {
+      console.error("Failed to toggle visibility", error);
+      alert("Error updating visibility. Check console.");
+    }
+  };
+
   const handleOpenComments = (e, project) => {
     e.stopPropagation();
     setSelectedProjectForComments(project);
@@ -323,11 +392,42 @@ export default function LiquidGlassUserProjects() {
   };
 
   const filteredProjects = useMemo(() => {
+    // --- DEBUGGING LOGS START ---
+    console.log(
+      "%c--- Filter Calculation Start ---",
+      "color: cyan; font-weight: bold;"
+    );
+
+    // 1. Check Permissions
+    const amIProfileOwner =
+      currentUser?.uid && targetUid && currentUser.uid === targetUid;
+    console.log(`User: ${currentUser?.uid} | Target Profile: ${targetUid}`);
+    console.log(
+      `Permission: ${
+        amIProfileOwner ? "OWNER (Show All)" : "VISITOR (Hide Hidden)"
+      }`
+    );
+
+    // 2. Check Source Data (CRITICAL STEP)
+    // If the project is missing from this list, the database update removed it from 'collabProjects'
+    console.log("Source Projects Count:", projects.length);
+    console.log(
+      "Source Projects Titles:",
+      projects.map((p) => p.title)
+    );
+
     return projects
-      .map((p) => ({
-        ...p,
-        commentsCount: commentCounts[p.id] || 0, // Inject live count
-      }))
+      .map((p) => {
+        // Ensure hiddenBy is strictly an array
+        const hiddenByArray = Array.isArray(p.hiddenBy) ? p.hiddenBy : [];
+        const isHidden = hiddenByArray.includes(targetUid);
+
+        return {
+          ...p,
+          commentsCount: commentCounts[p.id] || 0,
+          isHiddenOnThisProfile: isHidden,
+        };
+      })
       .filter((project) => {
         const matchesSearch =
           project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -336,9 +436,35 @@ export default function LiquidGlassUserProjects() {
           );
         const matchesStatus =
           filterStatus === "All" || project.status === filterStatus;
+
+        // VISIBILITY LOGIC (Refined)
+        if (project.isHiddenOnThisProfile) {
+          // If it is hidden, we check if we are the owner
+          if (amIProfileOwner) {
+            // We are the owner, so we KEEP it (return true if other matches pass)
+            // We log this to confirm the logic ran
+            console.log(
+              `[${project.title}] is Hidden, but I am Owner. -> KEEPING.`
+            );
+          } else {
+            // We are a visitor, so we REMOVE it
+            console.log(
+              `[${project.title}] is Hidden, and I am Visitor. -> REMOVING.`
+            );
+            return false;
+          }
+        }
+
         return matchesSearch && matchesStatus;
       });
-  }, [projects, searchQuery, filterStatus, commentCounts]);
+  }, [
+    projects,
+    searchQuery,
+    filterStatus,
+    commentCounts,
+    currentUser,
+    targetUid,
+  ]);
 
   if (loading)
     return (
@@ -528,18 +654,20 @@ export default function LiquidGlassUserProjects() {
                 currentUser={currentUser}
                 isHighlighted={project.id === highlightedId}
                 isEditMode={effectiveEditMode}
-                showLoginPrompt={loginPromptProjectId === project.id} // NEW
+                isProfileOwner={isOwner} // NEW: Pass ownership status
+                showLoginPrompt={loginPromptProjectId === project.id}
                 onLoginRedirect={(e) => {
                   e.stopPropagation();
                   navigate("/login");
-                }} // NEW
+                }}
                 onCloseLoginPrompt={(e) => {
                   e.stopPropagation();
                   setLoginPromptProjectId(null);
-                }} // NEW
+                }}
                 onClick={() => handleOpenView(project)}
                 onEdit={(e) => handleOpenEdit(e, project)}
                 onDelete={(e) => handleDeleteClick(e, project.id)}
+                onToggleVisibility={(e) => handleToggleVisibility(e, project)}
                 onLike={(e) => handleLike(e, project)}
                 onComment={(e) => handleOpenComments(e, project)}
               />
@@ -550,18 +678,20 @@ export default function LiquidGlassUserProjects() {
                 currentUser={currentUser}
                 isHighlighted={project.id === highlightedId}
                 isEditMode={effectiveEditMode}
-                showLoginPrompt={loginPromptProjectId === project.id} // NEW
+                isProfileOwner={isOwner} // NEW: Pass ownership status
+                showLoginPrompt={loginPromptProjectId === project.id}
                 onLoginRedirect={(e) => {
                   e.stopPropagation();
                   navigate("/login");
-                }} // NEW
+                }}
                 onCloseLoginPrompt={(e) => {
                   e.stopPropagation();
                   setLoginPromptProjectId(null);
-                }} // NEW
+                }}
                 onClick={() => handleOpenView(project)}
                 onEdit={(e) => handleOpenEdit(e, project)}
                 onDelete={(e) => handleDeleteClick(e, project.id)}
+                onToggleVisibility={(e) => handleToggleVisibility(e, project)}
                 onLike={(e) => handleLike(e, project)}
                 onComment={(e) => handleOpenComments(e, project)}
               />
@@ -661,15 +791,21 @@ const ProjectGridCard = ({
   isEditMode,
   isHighlighted,
   currentUser,
-  showLoginPrompt, // NEW
-  onLoginRedirect, // NEW
-  onCloseLoginPrompt, // NEW
+  isProfileOwner, // NEW: Receive ownership status
+  showLoginPrompt,
+  onLoginRedirect,
+  onCloseLoginPrompt,
   onClick,
   onEdit,
   onDelete,
+  onToggleVisibility,
   onLike,
   onComment,
 }) => {
+  // Check if hidden for the current user AND we are on their profile
+  const isHiddenForMe =
+    isProfileOwner && project.hiddenBy?.includes(currentUser?.uid);
+
   const visibleTags = project.tags?.slice(0, 4) || [];
   const remainingCount = project.tags?.length - visibleTags.length;
   const CHAR_LIMIT = 12;
@@ -704,11 +840,19 @@ const ProjectGridCard = ({
     >
       {/* Reduced height on mobile (h-32) so 2 columns don't look like skyscrapers */}
       <div className="relative h-32 sm:h-48 overflow-hidden">
-        <img
-          src={project.image || "https://via.placeholder.com/400"}
-          alt={project.title}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-        />
+        {/* NEW: Check for Lottie JSON or Image */}
+        {project.image?.endsWith(".json") ? (
+          <div className="w-full h-full transition-transform duration-500 group-hover:scale-110 bg-black/20 p-2">
+            <LottieRenderer url={project.image} className="w-full h-full" />
+          </div>
+        ) : (
+          <img
+            src={project.image || "https://via.placeholder.com/400"}
+            alt={project.title}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+          />
+        )}
+
         {/* UPDATED: Moved status to bottom-3 left-3 so it doesn't collide with top-right edit buttons */}
         <div className="absolute bottom-3 left-3 px-2.5 py-1 bg-black/40 backdrop-blur-md border border-white/10 rounded-lg flex items-center gap-1.5">
           {project.status === "Completed" ? (
@@ -719,23 +863,50 @@ const ProjectGridCard = ({
           <span className="text-[10px] font-bold uppercase tracking-wider text-white/90">
             {project.status}
           </span>
+          {/* NEW: Clear indication if hidden */}
+          {isHiddenForMe && (
+            <div className="flex items-center gap-1 pl-1.5 border-l border-white/20 ml-1.5 text-gray-400">
+              <EyeOff size={10} />
+              <span className="text-[9px] font-medium uppercase">Hidden</span>
+            </div>
+          )}
         </div>
-        {/* UPDATED: Only show edit buttons if page is in edit mode AND the project is owned by the user */}
-        {isEditMode && project.isOwned && (
+        {/* UPDATED: Show actions if in edit mode. Hide is available for all, Edit/Delete only for owners */}
+        {isEditMode && (
           /* FIX: Changed opacity to be visible by default, and only apply hover-hide logic on Large screens (lg) */
           <div className="absolute top-3 right-3 flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+            {/* NEW: Hide/Unhide Button placed left of Edit */}
             <button
-              onClick={onEdit}
-              className="p-1.5 sm:p-2 bg-black/40 backdrop-blur-md border border-white/10 text-white hover:text-orange-400 rounded-lg hover:scale-105 transition-all"
+              onClick={onToggleVisibility}
+              title={isHiddenForMe ? "Make Visible" : "Hide from others"}
+              className={`p-1.5 sm:p-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-lg hover:scale-105 transition-all ${
+                isHiddenForMe
+                  ? "text-gray-500 hover:text-white"
+                  : "text-white hover:text-gray-300"
+              }`}
             >
-              <Edit2 size={12} className="sm:w-[14px] sm:h-[14px]" />
+              {isHiddenForMe ? (
+                <EyeOff size={12} className="sm:w-[14px] sm:h-[14px]" />
+              ) : (
+                <Eye size={12} className="sm:w-[14px] sm:h-[14px]" />
+              )}
             </button>
-            <button
-              onClick={onDelete}
-              className="p-1.5 sm:p-2 bg-black/40 backdrop-blur-md border border-white/10 text-red-400 hover:text-red-500 rounded-lg hover:scale-105 transition-all"
-            >
-              <Trash2 size={12} className="sm:w-[14px] sm:h-[14px]" />
-            </button>
+            {project.isOwned && (
+              <>
+                <button
+                  onClick={onEdit}
+                  className="p-1.5 sm:p-2 bg-black/40 backdrop-blur-md border border-white/10 text-white hover:text-orange-400 rounded-lg hover:scale-105 transition-all"
+                >
+                  <Edit2 size={12} className="sm:w-[14px] sm:h-[14px]" />
+                </button>
+                <button
+                  onClick={onDelete}
+                  className="p-1.5 sm:p-2 bg-black/40 backdrop-blur-md border border-white/10 text-red-400 hover:text-red-500 rounded-lg hover:scale-105 transition-all"
+                >
+                  <Trash2 size={12} className="sm:w-[14px] sm:h-[14px]" />
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -879,15 +1050,21 @@ const ProjectListCard = ({
   isEditMode,
   isHighlighted,
   currentUser,
-  showLoginPrompt, // NEW
-  onLoginRedirect, // NEW
-  onCloseLoginPrompt, // NEW
+  isProfileOwner, // NEW: Receive ownership status
+  showLoginPrompt,
+  onLoginRedirect,
+  onCloseLoginPrompt,
   onClick,
   onEdit,
   onDelete,
+  onToggleVisibility,
   onLike,
   onComment,
 }) => {
+  // Check if hidden for the current user AND we are on their profile
+  const isHiddenForMe =
+    isProfileOwner && project.hiddenBy?.includes(currentUser?.uid);
+
   // FIXED: Adjusted tag limits for mobile safety
   const visibleTags = project.tags?.slice(0, 3) || [];
   const remainingCount = project.tags?.length - visibleTags.length;
@@ -923,12 +1100,20 @@ const ProjectListCard = ({
       `}
     >
       {/* REDESIGN: Reduced mobile width (w-24 vs w-28) to help aspect ratio and reduce height */}
-      <div className="w-24 sm:w-56 relative flex-shrink-0">
-        <img
-          src={project.image || "https://via.placeholder.com/400"}
-          alt={project.title}
-          className="w-full h-full object-cover absolute inset-0"
-        />
+      <div className="w-24 sm:w-56 relative flex-shrink-0 bg-black/20">
+        {/* NEW: Check for Lottie JSON or Image */}
+        {project.image?.endsWith(".json") ? (
+          <div className="absolute inset-0 p-1">
+            <LottieRenderer url={project.image} className="w-full h-full" />
+          </div>
+        ) : (
+          <img
+            src={project.image || "https://via.placeholder.com/400"}
+            alt={project.title}
+            className="w-full h-full object-cover absolute inset-0"
+          />
+        )}
+
         {/* REDESIGN: Adjusted positioning and sizing of badge for mobile */}
         <div className="absolute bottom-1.5 left-1.5 sm:bottom-3 sm:left-3 px-1.5 py-0.5 sm:px-2.5 sm:py-1 bg-black/40 backdrop-blur-md border border-white/10 rounded-md sm:rounded-lg flex items-center gap-1 sm:gap-1.5 z-10">
           {project.status === "Completed" ? (
@@ -955,23 +1140,45 @@ const ProjectListCard = ({
           {dateString && (
             <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-gray-500 font-medium">
               <Calendar size={10} /> {dateString}
+              {/* NEW: Indicator in list view */}
+              {isHiddenForMe && (
+                <span className="flex items-center gap-1 ml-2 px-1.5 py-0.5 rounded bg-white/5 border border-white/5 text-gray-400 text-[8px] uppercase font-bold">
+                  <EyeOff size={8} /> Hidden
+                </span>
+              )}
             </div>
           )}
-          {/* UPDATED: Only show edit buttons if page is in edit mode AND the project is owned by the user */}
-          {isEditMode && project.isOwned && (
+          {/* UPDATED: Show actions if in edit mode. Hide is available for all, Edit/Delete only for owners */}
+          {isEditMode && (
             <div className="flex gap-1">
+              {/* NEW: Hide Button */}
               <button
-                onClick={onEdit}
-                className="p-1 text-gray-400 hover:text-white"
+                onClick={onToggleVisibility}
+                title={isHiddenForMe ? "Make Visible" : "Hide from others"}
+                className={`p-1 ${
+                  isHiddenForMe
+                    ? "text-gray-600 hover:text-white"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
               >
-                <Edit2 size={12} />
+                {isHiddenForMe ? <EyeOff size={12} /> : <Eye size={12} />}
               </button>
-              <button
-                onClick={onDelete}
-                className="p-1 text-gray-400 hover:text-red-500"
-              >
-                <Trash2 size={12} />
-              </button>
+              {project.isOwned && (
+                <>
+                  <button
+                    onClick={onEdit}
+                    className="p-1 text-gray-400 hover:text-white"
+                  >
+                    <Edit2 size={12} />
+                  </button>
+                  <button
+                    onClick={onDelete}
+                    className="p-1 text-gray-400 hover:text-red-500"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

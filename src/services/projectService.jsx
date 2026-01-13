@@ -53,14 +53,21 @@ export const updateProject = async (userId, projectId, projectData) => {
   try {
     const projectRef = doc(db, "users", userId, "projects", projectId);
 
-    // NEW: Ensure collaboratorIds is updated when editing
-    const collaboratorIds = projectData.collaborators?.map((c) => c.uid) || [];
-
-    await updateDoc(projectRef, {
+    // 1. Create a payload with the basic data
+    const updatePayload = {
       ...projectData,
-      collaboratorIds, // Saved as ["uid1", "uid2"]
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    // 2. ONLY update collaboratorIds if 'collaborators' is actually in the update data
+    // This prevents wiping them out when doing partial updates (like hiding)
+    if (projectData.collaborators) {
+      updatePayload.collaboratorIds = projectData.collaborators.map(
+        (c) => c.uid
+      );
+    }
+
+    await updateDoc(projectRef, updatePayload);
   } catch (error) {
     console.error("Error updating project:", error);
     throw error;
