@@ -20,10 +20,18 @@ import {
   addProjectComment,
   deleteProjectComment,
   addCommentReply,
-  updateProjectComment, // Added update service
+  updateProjectComment,
 } from "../services/projectService";
 import { db } from "../lib/firebase";
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+// UPDATED: Added doc, getDoc to fetch user profile for avatar
+import {
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  doc,
+  getDoc,
+} from "firebase/firestore";
 
 // --- Recursive Component for Comment Nodes ---
 const CommentNode = ({
@@ -82,13 +90,25 @@ const CommentNode = ({
       <div className="flex gap-3 group relative">
         {/* Avatar */}
         <div className="flex-shrink-0 z-10">
-          <img
-            src={comment.userAvatar || "https://via.placeholder.com/40"}
-            alt={comment.userName}
-            className={`w-8 h-8 rounded-full object-cover border-2 transition-all duration-300 group-hover:scale-105 ${
-              isOwnerComment ? "border-orange-500" : "border-white/10"
-            }`}
-          />
+          {comment.userAvatar ? (
+            <img
+              src={comment.userAvatar}
+              alt={comment.userName}
+              className={`w-8 h-8 rounded-full object-cover border-2 transition-all duration-300 group-hover:scale-105 ${
+                isOwnerComment ? "border-orange-500" : "border-white/10"
+              }`}
+            />
+          ) : (
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-300 group-hover:scale-105 ${
+                isOwnerComment
+                  ? "bg-orange-500/10 text-orange-500 border-orange-500"
+                  : "bg-white/10 text-white border-white/10"
+              }`}
+            >
+              {comment.userName?.charAt(0).toUpperCase()}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 min-w-0">
@@ -379,10 +399,30 @@ export default function ProjectCommentModal({
   project,
   currentUser,
 }) {
-  const navigate = useNavigate(); // NEW: Initialize Hook
+  const navigate = useNavigate();
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // UPDATED: State for fetched DB photo
+  const [dbPhotoURL, setDbPhotoURL] = useState(null);
+
+  // --- NEW: FETCH DB AVATAR FOR CURRENT USER ---
+  useEffect(() => {
+    const fetchUserAvatar = async () => {
+      if (!currentUser?.uid) return;
+      try {
+        const userDocRef = doc(db, "users", currentUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          setDbPhotoURL(userDocSnap.data().photoURL);
+        }
+      } catch (error) {
+        console.error("Error fetching user avatar:", error);
+      }
+    };
+    fetchUserAvatar();
+  }, [currentUser]);
 
   // Navigation Stack for "New Page" Logic
   const [navStack, setNavStack] = useState([]);
@@ -447,7 +487,8 @@ export default function ProjectCommentModal({
       await addProjectComment(projectOwnerId, project.id, {
         userId: currentUser.uid,
         userName: currentUser.displayName || "User",
-        userAvatar: currentUser.photoURL,
+        // UPDATED: Use dbPhotoURL if available, fallback to auth photo
+        userAvatar: dbPhotoURL || currentUser.photoURL,
         text: newComment,
       });
       setNewComment("");
@@ -471,8 +512,9 @@ export default function ProjectCommentModal({
         text: replyText,
         userId: currentUser.uid,
         userName: currentUser.displayName || "User",
-        userAvatar: currentUser.photoURL,
-        text: replyText, // Ensure text is passed correctly
+        // UPDATED: Use dbPhotoURL if available
+        userAvatar: dbPhotoURL || currentUser.photoURL,
+        text: replyText,
       });
       setReplyText("");
       setReplyingTo(null);
@@ -601,14 +643,17 @@ export default function ProjectCommentModal({
         {currentThreadRoot && (
           <div className="bg-black/20 p-4 border-b border-white/5 animate-in slide-in-from-right-4 duration-300 ease-out">
             <div className="flex gap-3 opacity-80">
-              <img
-                src={
-                  currentThreadRoot.userAvatar ||
-                  "https://via.placeholder.com/40"
-                }
-                className="w-6 h-6 rounded-full border border-white/10"
-                alt=""
-              />
+              {currentThreadRoot.userAvatar ? (
+                <img
+                  src={currentThreadRoot.userAvatar}
+                  className="w-6 h-6 rounded-full border border-white/10 object-cover"
+                  alt=""
+                />
+              ) : (
+                <div className="w-6 h-6 rounded-full border border-white/10 bg-white/10 flex items-center justify-center text-[10px] font-bold text-white">
+                  {currentThreadRoot.userName?.charAt(0).toUpperCase()}
+                </div>
+              )}
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-bold text-white">
@@ -677,11 +722,19 @@ export default function ProjectCommentModal({
         {currentUser ? (
           <div className="p-5 bg-black/20 border-t border-white/5 backdrop-blur-md z-20">
             <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl px-2 py-2 focus-within:bg-white/10 focus-within:border-orange-500/30 focus-within:shadow-lg focus-within:shadow-orange-500/10 transition-all duration-300 ease-in-out">
-              <img
-                src={currentUser.photoURL || "https://via.placeholder.com/40"}
-                alt="Me"
-                className="w-8 h-8 rounded-full object-cover border border-white/10 ml-2 transition-transform duration-300 hover:scale-105"
-              />
+              {dbPhotoURL || currentUser.photoURL ? (
+                <img
+                  src={dbPhotoURL || currentUser.photoURL}
+                  alt="Me"
+                  className="w-8 h-8 rounded-full object-cover border border-white/10 ml-2 transition-transform duration-300 hover:scale-105"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-orange-500 to-red-600 text-white text-xs font-bold border border-white/10 ml-2 transition-transform duration-300 hover:scale-105">
+                  {(currentUser.displayName || currentUser.email || "U")
+                    .charAt(0)
+                    .toUpperCase()}
+                </div>
+              )}
               <input
                 type="text"
                 value={newComment}

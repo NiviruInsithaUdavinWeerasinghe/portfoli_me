@@ -81,12 +81,15 @@ export default function Login() {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
+        const data = docSnap.data();
         const redirectPath = sessionStorage.getItem("login_redirect_to");
         if (redirectPath) {
           sessionStorage.removeItem("login_redirect_to");
           navigate(redirectPath);
         } else {
-          navigate(`/${user.uid}/overview`);
+          // UPDATED: Check for username, fallback to uid
+          const identifier = data.username || user.uid;
+          navigate(`/${identifier}/overview`);
         }
       } else {
         setShowOnboarding(true);
@@ -125,12 +128,15 @@ export default function Login() {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
+        const data = docSnap.data();
         const redirectPath = sessionStorage.getItem("login_redirect_to");
         if (redirectPath) {
           sessionStorage.removeItem("login_redirect_to");
           navigate(redirectPath);
         } else {
-          navigate(`/${user.uid}/overview`);
+          // UPDATED: Check for username, fallback to uid
+          const identifier = data.username || user.uid;
+          navigate(`/${identifier}/overview`);
         }
       } else {
         setShowOnboarding(true);
@@ -209,12 +215,15 @@ export default function Login() {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
+        const data = docSnap.data();
         const redirectPath = sessionStorage.getItem("login_redirect_to");
         if (redirectPath) {
           sessionStorage.removeItem("login_redirect_to");
           navigate(redirectPath);
         } else {
-          navigate(`/${user.uid}/overview`);
+          // UPDATED: Check for username, fallback to uid
+          const identifier = data.username || user.uid;
+          navigate(`/${identifier}/overview`);
         }
       } else {
         // Logged in but no profile data -> Onboarding

@@ -162,17 +162,20 @@ const RECENT_ACTIVITY = [
 
 // --- MAIN COMPONENT ---
 export default function LiquidGlassUserHome() {
-  // UPDATED: Destructure new layout props
-  const { isEditMode, setIsEditMode, portfolioName, headerLayout, isPublic } =
-    useOutletContext();
+  // UPDATED: Destructure targetUid from context
+  const {
+    isEditMode,
+    setIsEditMode,
+    portfolioName,
+    headerLayout,
+    isPublic,
+    targetUid,
+  } = useOutletContext();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const { username } = useParams();
+  // const { username } = useParams(); // UPDATED: Removed, we rely on targetUid from context
 
-  // Allow viewing if username param exists, even if not logged in
-  const targetUid = username || currentUser?.uid;
-
-  // Strict check: Must be logged in AND uid must match target to be owner
+  // UPDATED: Owner check matches current user against the resolved targetUid
   const isOwner =
     currentUser?.uid && targetUid && currentUser.uid === targetUid;
 

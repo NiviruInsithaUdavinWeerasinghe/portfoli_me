@@ -517,8 +517,21 @@ function Home() {
               {currentUser && (
                 <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto mb-12">
                   <button
-                    // FIX: Use the actual current user's UID instead of hardcoded "demo_user"
-                    onClick={() => navigate(`/${currentUser.uid}/overview`)}
+                    // FIX: Check for username before navigating
+                    onClick={async () => {
+                      if (currentUser?.uid) {
+                        try {
+                          const userDoc = await getDoc(
+                            doc(db, "users", currentUser.uid)
+                          );
+                          const data = userDoc.exists() ? userDoc.data() : {};
+                          const identifier = data.username || currentUser.uid;
+                          navigate(`/${identifier}/overview`);
+                        } catch (e) {
+                          navigate(`/${currentUser.uid}/overview`);
+                        }
+                      }
+                    }}
                     className="bg-white text-black px-8 py-3.5 rounded-xl font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 shadow-xl shadow-white/5"
                   >
                     Create Your Portfolio <ArrowRight size={18} />
@@ -923,7 +936,8 @@ function Home() {
                               }
                             }
                             // 2. Open Portfolio
-                            window.open(`/${profile.uid}/overview`, "_blank");
+                            const identifier = profile.username || profile.uid; // UPDATED: Use username if available
+                            window.open(`/${identifier}/overview`, "_blank");
                           }}
                           // UPDATED: Added animate-in classes here for smooth revert
                           className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-orange-600 hover:border-orange-600 text-white font-medium transition-all flex items-center justify-center gap-2 group-hover:shadow-[0_0_15px_rgba(234,88,12,0.3)] animate-in fade-in zoom-in duration-300"

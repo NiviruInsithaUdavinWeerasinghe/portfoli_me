@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from "react";
-// --- NEW IMPORTS FOR FETCHING NAME & UPDATING STATUS ---
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+// UPDATED: Added query imports
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import {
   Outlet,
@@ -36,14 +44,47 @@ import {
 } from "lucide-react";
 
 const LiquidGlassPortfolioLayout = () => {
-  const { username } = useParams(); // This 'username' is actually the UID from the URL
+  const { username: routeParam } = useParams(); // UPDATED: Renamed to routeParam (could be 'Niviru' or 'uid')
+  const [resolvedUid, setResolvedUid] = useState(null); // UPDATED: Store the actual UID
+
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
 
-  // Check if the viewer is the owner
-  // Ensure we compare strings safely
-  const isOwner = currentUser?.uid && username && currentUser.uid === username;
+  // UPDATED: Resolve URL param to UID
+  useEffect(() => {
+    const resolveUser = async () => {
+      if (!routeParam) return;
+
+      // 1. If param matches current logged in user's username or uid, we know the UID
+      // (This is an optimization, fetch logic below handles the real check)
+
+      try {
+        // A. Check if it's a Username
+        const q = query(
+          collection(db, "users"),
+          where("username", "==", routeParam)
+        );
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          // Found by username
+          setResolvedUid(querySnapshot.docs[0].id);
+        } else {
+          // B. Assume it's a UID (Legacy or direct access)
+          // We verify if this doc exists to be safe, but mostly we can just set it
+          setResolvedUid(routeParam);
+        }
+      } catch (error) {
+        console.error("Error resolving user:", error);
+      }
+    };
+    resolveUser();
+  }, [routeParam]);
+
+  // UPDATED: Check ownership using resolved UID
+  const isOwner =
+    currentUser?.uid && resolvedUid && currentUser.uid === resolvedUid;
 
   // States
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -65,12 +106,22 @@ const LiquidGlassPortfolioLayout = () => {
 
   const [isPublic, setIsPublic] = useState(true); // NEW: Visibility State
   const [isLayoutMenuOpen, setIsLayoutMenuOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); // NEW: Sidebar Toggle
+
+  // UPDATED: Initialize Sidebar state from localStorage
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    const saved = localStorage.getItem("sidebarCollapsed");
+    return saved === "true";
+  });
 
   // UPDATED: Save to localStorage whenever isEditMode changes
   useEffect(() => {
     localStorage.setItem("isEditMode", isEditMode);
   }, [isEditMode]);
+
+  // UPDATED: Save to localStorage whenever isSidebarCollapsed changes
+  useEffect(() => {
+    localStorage.setItem("sidebarCollapsed", isSidebarCollapsed);
+  }, [isSidebarCollapsed]);
 
   // FIX: Save headerLayout to localStorage whenever it changes
   useEffect(() => {
@@ -93,12 +144,13 @@ const LiquidGlassPortfolioLayout = () => {
   // CONSOLIDATED FIX: Single Effect to Fetch, Update State, Set Baseline, and Stop Loading
   useEffect(() => {
     const fetchSettings = async () => {
-      if (!username) {
-        setIsLoadingSettings(false);
+      // UPDATED: Wait for resolvedUid
+      if (!resolvedUid) {
         return;
       }
       try {
-        const userDocRef = doc(db, "users", username);
+        // UPDATED: Use resolvedUid instead of username/routeParam
+        const userDocRef = doc(db, "users", resolvedUid);
         const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
@@ -127,7 +179,7 @@ const LiquidGlassPortfolioLayout = () => {
       }
     };
     fetchSettings();
-  }, [username]);
+  }, [resolvedUid]); // UPDATED: Changed to resolvedUid
 
   // NEW: Conditional Save Logic
   const handleGlobalSave = async () => {
@@ -231,17 +283,19 @@ const LiquidGlassPortfolioLayout = () => {
   // NEW EFFECT: Fetch the display name associated with the URL UID
   useEffect(() => {
     const fetchDisplayName = async () => {
-      if (!username) return;
+      // UPDATED: Check resolvedUid instead of username
+      if (!resolvedUid) return;
 
       // 1. If viewing own profile, use auth data immediately
-      if (currentUser && currentUser.uid === username) {
+      if (currentUser && currentUser.uid === resolvedUid) {
         setBreadcrumbName(currentUser.displayName || "My Portfolio");
         return;
       }
 
       // 2. If viewing someone else's, fetch their basic info
       try {
-        const userDocRef = doc(db, "users", username);
+        // UPDATED: Use resolvedUid for DB fetch
+        const userDocRef = doc(db, "users", resolvedUid);
         const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
@@ -258,7 +312,7 @@ const LiquidGlassPortfolioLayout = () => {
     };
 
     fetchDisplayName();
-  }, [username, currentUser]);
+  }, [resolvedUid, currentUser]); // UPDATED: Dependency
 
   useEffect(() => {
     const handleScroll = () => {
@@ -268,12 +322,9 @@ const LiquidGlassPortfolioLayout = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Safety: Force Edit Mode OFF if user is not the owner
-  useEffect(() => {
-    if (!isOwner && isEditMode) {
-      setIsEditMode(false);
-    }
-  }, [isOwner, isEditMode]);
+  // UPDATED: Removed the "Safety Check" useEffect.
+  // We rely on the UI conditionals (e.g., {isOwner && ...}) to hide buttons.
+  // This prevents Edit Mode from turning off automatically while Auth is loading.
 
   const handleLogout = async () => {
     try {
@@ -416,14 +467,14 @@ const LiquidGlassPortfolioLayout = () => {
           `}
             >
               <NavItem
-                to={`/${username}/overview`}
+                to={`/${routeParam}/overview`} // UPDATED: routeParam
                 icon={<User size={18} />}
                 label="Overview"
                 collapsed={headerLayout === "left" && isSidebarCollapsed}
                 headerLayout={headerLayout}
               />
               <NavItem
-                to={`/${username}/projects`}
+                to={`/${routeParam}/projects`} // UPDATED: routeParam
                 icon={<Briefcase size={18} />}
                 label="Projects"
                 collapsed={headerLayout === "left" && isSidebarCollapsed}
@@ -431,7 +482,7 @@ const LiquidGlassPortfolioLayout = () => {
               />
               {isOwner && (
                 <NavItem
-                  to={`/${username}/settings`}
+                  to={`/${routeParam}/settings`} // UPDATED: routeParam
                   icon={<Settings size={18} />}
                   label="Settings"
                   collapsed={headerLayout === "left" && isSidebarCollapsed}
@@ -555,7 +606,7 @@ const LiquidGlassPortfolioLayout = () => {
                     <div className="space-y-1">
                       <button
                         onClick={() => {
-                          navigate(`/${username}/overview`);
+                          navigate(`/${routeParam}/overview`); // UPDATED
                           setIsProfileDropdownOpen(false);
                         }}
                         className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
@@ -567,7 +618,7 @@ const LiquidGlassPortfolioLayout = () => {
                       </button>
                       <button
                         onClick={() => {
-                          navigate(`/${username}/settings`);
+                          navigate(`/${routeParam}/settings`); // UPDATED
                           setIsProfileDropdownOpen(false);
                         }}
                         className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
@@ -1190,7 +1241,7 @@ const LiquidGlassPortfolioLayout = () => {
                       {/* Dropdown Links */}
                       <div className="space-y-1">
                         <button
-                          onClick={() => navigate(`/${username}/overview`)}
+                          onClick={() => navigate(`/${routeParam}/overview`)} // UPDATED
                           className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
                         >
                           <div className="p-2 rounded-lg transition-colors bg-blue-500/10 border-blue-500/10 text-blue-500">
@@ -1199,7 +1250,7 @@ const LiquidGlassPortfolioLayout = () => {
                           Profile
                         </button>
                         <button
-                          onClick={() => navigate(`/${username}/settings`)}
+                          onClick={() => navigate(`/${routeParam}/settings`)} // UPDATED
                           className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
                         >
                           <div className="p-2 rounded-lg transition-colors bg-orange-500/10 border-orange-500/10 text-orange-500">
@@ -1326,13 +1377,13 @@ const LiquidGlassPortfolioLayout = () => {
             </div>
             <nav className="flex flex-col gap-2">
               <MobileNavItem
-                to={`/${username}/overview`}
+                to={`/${routeParam}/overview`} // UPDATED
                 icon={<User size={18} />}
                 label="Overview"
                 onClick={() => setIsMobileMenuOpen(false)}
               />
               <MobileNavItem
-                to={`/${username}/projects`}
+                to={`/${routeParam}/projects`} // UPDATED
                 icon={<Briefcase size={18} />}
                 label="Projects"
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -1342,7 +1393,7 @@ const LiquidGlassPortfolioLayout = () => {
               {isOwner && (
                 <>
                   <MobileNavItem
-                    to={`/${username}/settings`}
+                    to={`/${routeParam}/settings`} // UPDATED
                     icon={<Settings size={18} />}
                     label="Settings"
                     onClick={() => setIsMobileMenuOpen(false)}
@@ -1554,7 +1605,7 @@ const LiquidGlassPortfolioLayout = () => {
           )}
 
           {/* Passing context + Header Customization props */}
-          {!isLoadingSettings && (
+          {!isLoadingSettings && resolvedUid && (
             <Outlet
               context={{
                 isEditMode,
@@ -1567,6 +1618,7 @@ const LiquidGlassPortfolioLayout = () => {
                 isPublic,
                 setIsPublic,
                 handleGlobalSave,
+                targetUid: resolvedUid, // UPDATED: Pass the real UID to children
               }}
             />
           )}

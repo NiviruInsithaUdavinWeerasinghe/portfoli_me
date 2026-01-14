@@ -1,8 +1,17 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios"; // Added for API validation
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import axios from "axios";
+// UPDATED: Added collection, query, where, getDocs for username check
+import {
+  doc,
+  setDoc,
+  serverTimestamp,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { uploadFileToCloudinary } from "../services/cloudinaryService"; // Added Cloudinary Import
+import { uploadFileToCloudinary } from "../services/cloudinaryService";
 import { encryptData } from "../lib/secureStorage"; // Import Encryption
 import {
   User,
@@ -26,13 +35,48 @@ export default function OnboardingModal({ user, onComplete }) {
   const [error, setError] = useState(""); // New Error State
   const [formData, setFormData] = useState({
     displayName: "",
+    username: "", // UPDATED: Added username field
     role: "",
     bio: "",
     githubToken: "",
     githubUsername: "",
     isPublic: true,
-    photoURL: "", // Added to track photo
+    photoURL: "",
   });
+
+  // UPDATED: Username Validation State
+  const [usernameStatus, setUsernameStatus] = useState("idle"); // idle, checking, available, taken, error
+
+  // UPDATED: Check Username Availability
+  const checkUsername = async (username) => {
+    if (username.length < 3) {
+      setUsernameStatus("error");
+      return;
+    }
+    // Allow only alphanumeric, underscores, hyphens
+    const regex = /^[a-zA-Z0-9_-]+$/;
+    if (!regex.test(username)) {
+      setUsernameStatus("invalid_char");
+      return;
+    }
+
+    setUsernameStatus("checking");
+    try {
+      const q = query(
+        collection(db, "users"),
+        where("username", "==", username)
+      );
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        setUsernameStatus("taken");
+      } else {
+        setUsernameStatus("available");
+      }
+    } catch (err) {
+      console.error("Username check failed", err);
+      setUsernameStatus("error");
+    }
+  };
 
   // Pre-fill data & Restore from LocalStorage
   useEffect(() => {
@@ -125,19 +169,26 @@ export default function OnboardingModal({ user, onComplete }) {
       return;
     }
 
-    // 3. Save Data (We use 'authenticatedUsername' to be 100% sure it's correct)
+    // 3. Save Data
+    if (usernameStatus !== "available") {
+      setError("Please choose a valid and available username.");
+      setIsLoading(false);
+      return;
+    }
+
     try {
       await setDoc(
         doc(db, "users", user.uid),
         {
           uid: user.uid,
           email: user.email,
+          username: formData.username, // UPDATED: Saving username
           displayName: formData.displayName,
           role: formData.role,
           bio: formData.bio,
           isPublic: formData.isPublic,
-          photoURL: formData.photoURL || user.photoURL, // UPDATED: Use form data or fallback
-          githubToken: encryptData(formData.githubToken), // ENCRYPTED BEFORE SAVING
+          photoURL: formData.photoURL || user.photoURL,
+          githubToken: encryptData(formData.githubToken),
           githubUsername: authenticatedUsername,
           lastLogin: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -148,7 +199,8 @@ export default function OnboardingModal({ user, onComplete }) {
 
       // Clear draft on success
       localStorage.removeItem("onboarding_draft");
-      onComplete();
+      // UPDATED: Pass the username back to the parent
+      onComplete(formData.username);
     } catch (error) {
       console.error("Error saving user data:", error);
       setError("Failed to save profile. Please try again.");
@@ -233,6 +285,52 @@ export default function OnboardingModal({ user, onComplete }) {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* UPDATED: Username Input */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-400 ml-1 flex justify-between">
+                <span>Username (for your URL)</span>
+                <span
+                  className={`text-[10px] ${
+                    usernameStatus === "available"
+                      ? "text-green-500"
+                      : usernameStatus === "taken"
+                      ? "text-red-500"
+                      : "text-gray-500"
+                  }`}
+                >
+                  {usernameStatus === "available" && "Available"}
+                  {usernameStatus === "taken" && "Username taken"}
+                  {usernameStatus === "invalid_char" && "Alphanumeric only"}
+                  {usernameStatus === "checking" && "Checking..."}
+                </span>
+              </label>
+              <div
+                className={`relative group bg-[#020617] rounded-xl border transition-all duration-300 ${
+                  usernameStatus === "taken"
+                    ? "border-red-500/50"
+                    : usernameStatus === "available"
+                    ? "border-green-500/50"
+                    : "border-white/10 focus-within:border-orange-500/50"
+                }`}
+              >
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                  <span className="text-xs">@</span>
+                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="foryourcustomprofileurl"
+                  value={formData.username}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\s/g, ""); // No spaces
+                    setFormData({ ...formData, username: val });
+                    if (val) checkUsername(val);
+                  }}
+                  className="w-full bg-transparent border-none rounded-xl py-3 pl-8 pr-4 text-sm text-white focus:outline-none focus:ring-0 lowercase"
+                />
+              </div>
+            </div>
+
             {/* Display Name */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-400 ml-1">
@@ -244,6 +342,7 @@ export default function OnboardingModal({ user, onComplete }) {
                 </div>
                 <input
                   type="text"
+                  placeholder="Enter display name"
                   required
                   value={formData.displayName}
                   onChange={(e) =>

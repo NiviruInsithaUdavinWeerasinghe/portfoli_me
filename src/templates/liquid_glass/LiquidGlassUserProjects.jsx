@@ -79,14 +79,14 @@ const LottieRenderer = ({ url, className }) => {
 
 export default function LiquidGlassUserProjects() {
   const navigate = useNavigate(); // NEW: Hook for redirection
-  // UPDATED: Get headerLayout from context
-  const { isEditMode, headerLayout } = useOutletContext();
+  // UPDATED: Get headerLayout AND targetUid from context
+  const { isEditMode, headerLayout, targetUid } = useOutletContext();
   const { currentUser } = useAuth();
-  const { username } = useParams(); // Get UID
+  // const { username } = useParams(); // UPDATED: Removed
 
   // Identify who owns the profile we are viewing
-  // Allow view if username exists (Guest) OR if currentUser exists (Owner view own)
-  const targetUid = username || currentUser?.uid;
+  // UPDATED: Use targetUid from context (which is the resolved UID)
+  // const targetUid = username || currentUser?.uid; // Removed logic, targetUid comes from context
 
   // Strict check: User must be logged in AND IDs must match to be owner
   const isOwner =

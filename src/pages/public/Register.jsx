@@ -41,12 +41,15 @@ export default function Register() {
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
+        const data = docSnap.data();
         const redirectPath = sessionStorage.getItem("login_redirect_to");
         if (redirectPath) {
           sessionStorage.removeItem("login_redirect_to");
           navigate(redirectPath);
         } else {
-          navigate(`/${user.uid}/overview`);
+          // UPDATED: Check for username, fallback to uid
+          const identifier = data.username || user.uid;
+          navigate(`/${identifier}/overview`);
         }
       } else {
         setShowOnboarding(true);
@@ -118,14 +121,17 @@ export default function Register() {
     }
   };
 
-  const handleOnboardingComplete = () => {
+  // UPDATED: Accept savedUsername to redirect correctly
+  const handleOnboardingComplete = (savedUsername) => {
     setShowOnboarding(false);
     const redirectPath = sessionStorage.getItem("login_redirect_to");
     if (redirectPath) {
       sessionStorage.removeItem("login_redirect_to");
       navigate(redirectPath);
     } else if (currentUser?.uid) {
-      navigate(`/${currentUser.uid}/overview`);
+      // Use the username returned from modal, or fallback to UID
+      const identifier = savedUsername || currentUser.uid;
+      navigate(`/${identifier}/overview`);
     }
   };
 
