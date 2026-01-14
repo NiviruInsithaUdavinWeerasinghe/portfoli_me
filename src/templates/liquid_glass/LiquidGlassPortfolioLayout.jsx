@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react"; // Added useRef
 // UPDATED: Added query imports
 import {
   doc,
@@ -41,6 +41,7 @@ import {
   Lock, // NEW
   Save, // NEW
   AlertCircle, // NEW
+  Info, // NEW: For Tips
 } from "lucide-react";
 
 const LiquidGlassPortfolioLayout = () => {
@@ -334,6 +335,24 @@ const LiquidGlassPortfolioLayout = () => {
       console.error("Failed to log out", error);
     }
   };
+
+  // --- NEW: Global Page Tips Logic ---
+  const [showPageTips, setShowPageTips] = useState(false);
+  const tipsRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (tipsRef.current && !tipsRef.current.contains(event.target)) {
+        setShowPageTips(false);
+      }
+    };
+    if (showPageTips) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showPageTips]);
 
   return (
     <div className="min-h-screen bg-[#020617] text-white flex flex-col font-sans selection:bg-orange-500 selection:text-white relative overflow-x-hidden">
@@ -1593,14 +1612,102 @@ const LiquidGlassPortfolioLayout = () => {
           }`}
         >
           {!isLoadingSettings && (
-            <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
-              <span className="font-medium text-gray-400">
-                {breadcrumbName}
-              </span>
-              <ChevronDown size={12} className="-rotate-90" />
-              <span className="text-white font-medium capitalize">
-                {location.pathname.split("/").pop()}
-              </span>
+            <div className="mb-6 flex items-center justify-between">
+              {/* Left: Breadcrumbs */}
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <span className="font-medium text-gray-400">
+                  {breadcrumbName}
+                </span>
+                <ChevronDown size={12} className="-rotate-90" />
+                <span className="text-white font-medium capitalize">
+                  {location.pathname.split("/").pop()}
+                </span>
+              </div>
+
+              {/* Right: Quick Tips Dropdown */}
+              <div className="relative" ref={tipsRef}>
+                <button
+                  onClick={() => setShowPageTips(!showPageTips)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-bold uppercase tracking-wider ${
+                    showPageTips
+                      ? "bg-orange-500 text-white border-orange-500"
+                      : "bg-white/5 border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                  }`}
+                >
+                  <Info size={14} />
+                  <span className="hidden sm:inline">Tips</span>
+                </button>
+
+                {showPageTips && (
+                  // FIXED: z-[100] to sit above Home overlays
+                  <div className="absolute right-0 top-full mt-3 w-72 p-5 bg-[#0F1623] border border-white/10 rounded-xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.9)] z-[100] animate-in fade-in zoom-in-95 duration-200 ring-1 ring-white/5">
+                    <h4 className="text-xs font-bold text-white uppercase mb-4 tracking-wider flex items-center gap-2">
+                      <Info size={14} className="text-orange-500" />
+                      Interface Guide
+                    </h4>
+
+                    <div className="space-y-4">
+                      {/* Section 1: Header - ONLY FOR OWNER */}
+                      {isOwner && (
+                        <div className="relative pl-3 border-l-2 border-white/10">
+                          <h5 className="text-xs font-bold text-gray-300 mb-1">
+                            Edit Mode
+                          </h5>
+                          {/* Desktop Text (xl and up) */}
+                          <p className="hidden xl:block text-[11px] text-gray-500 leading-relaxed">
+                            Enable <b>Edit Mode</b> to access Developer Tools:
+                            edit your portfolio, manage layout, and add details.
+                          </p>
+                          {/* Mobile/Tablet Text (below xl) */}
+                          <p className="block xl:hidden text-[11px] text-gray-500 leading-relaxed">
+                            <b>Edit Mode</b> and other settings can be found in
+                            the main <b>Menu</b> options.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Section 2: Overview - DYNAMIC CONTENT */}
+                      <div className="relative pl-3 border-l-2 border-white/10">
+                        <h5 className="text-xs font-bold text-gray-300 mb-1">
+                          Overview
+                        </h5>
+                        <p className="text-[11px] text-gray-500 leading-relaxed">
+                          {isOwner
+                            ? 'View real-time visitor stats. Your "Tech Stack" is automatically generated from the tags used in your Projects.'
+                            : "View professional summary, activity statistics, and technical expertise."}
+                        </p>
+                      </div>
+
+                      {/* Section 3: Projects - CONDITIONAL CONTENT */}
+                      <div className="relative pl-3 border-l-2 border-white/10">
+                        <h5 className="text-xs font-bold text-gray-300 mb-1">
+                          Projects
+                        </h5>
+                        <ul className="text-[11px] text-gray-500 leading-relaxed list-disc pl-3 space-y-1">
+                          <li>
+                            Search also filters by <b>Tags</b>.
+                          </li>
+                          <li>
+                            Click card to view <b>Media & Details</b>.
+                          </li>
+                          {/* Only show Edit/Delete tip to Owner */}
+                          {isOwner && (
+                            <li>
+                              <b>Hover</b> over image to Edit/Delete in
+                              desktops.
+                            </li>
+                          )}
+                          <li>
+                            {currentUser
+                              ? "Interact with Likes & Comments."
+                              : "Login to Like & Comment."}
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

@@ -122,26 +122,6 @@ export default function LiquidGlassUserProjects() {
   // NEW: Track which project is showing the login prompt
   const [loginPromptProjectId, setLoginPromptProjectId] = useState(null);
 
-  // NEW: State for Page Tips Dropdown
-  const [showPageTips, setShowPageTips] = useState(false);
-  const tipsRef = useRef(null); // Ref for click outside detection
-
-  // Close tips when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (tipsRef.current && !tipsRef.current.contains(event.target)) {
-        setShowPageTips(false);
-      }
-    };
-
-    if (showPageTips) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [showPageTips]);
-
   const [projects, setProjects] = useState([]);
   // NEW: Separate states for owned vs. collaborated projects to merge them later
   const [ownedProjects, setOwnedProjects] = useState([]);
@@ -491,56 +471,6 @@ export default function LiquidGlassUserProjects() {
             <h2 className="text-3xl font-bold text-white tracking-tight">
               Projects
             </h2>
-            {/* NEW: Page Tips Button */}
-            {/* UPDATED: Added ref={tipsRef} here so the click-outside logic knows what element to track */}
-            <div className="relative" ref={tipsRef}>
-              <button
-                onClick={() => setShowPageTips(!showPageTips)}
-                className="p-1.5 rounded-full bg-white/5 border border-white/10 text-gray-400 hover:text-orange-500 hover:bg-orange-500/10 transition-colors"
-                title="Page Tips"
-              >
-                <Info size={16} />
-              </button>
-              {showPageTips && (
-                /* UPDATED: Added centered positioning for mobile (left-1/2 -translate-x-1/2) */
-                <div className="absolute top-full left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 mt-2 z-30 w-64 p-4 bg-[#0F1623] border border-white/10 rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-                  <h4 className="text-xs font-bold text-white uppercase mb-2 tracking-wider">
-                    Quick Tips
-                  </h4>
-                  <ul className="space-y-2 text-xs text-gray-400">
-                    <li className="flex gap-2">
-                      <Search size={12} className="mt-0.5 text-blue-400" />
-                      <span>
-                        Search also filters by <b>Tags</b>.
-                      </span>
-                    </li>
-                    <li className="flex gap-2">
-                      <ExternalLink
-                        size={12}
-                        className="mt-0.5 text-orange-400"
-                      />
-                      <span>
-                        Click card to view <b>Media & Details</b>.
-                      </span>
-                    </li>
-                    {effectiveEditMode && (
-                      <li className="flex gap-2">
-                        <Edit2 size={12} className="mt-0.5 text-green-400" />
-                        <span>
-                          <b>Hover</b> over image to Edit/Delete in desktops.
-                        </span>
-                      </li>
-                    )}
-                    <li className="flex gap-2">
-                      <ThumbsUp size={12} className="mt-0.5 text-purple-400" />
-                      <span>
-                        Login to <b>Like & Comment</b>.
-                      </span>
-                    </li>
-                  </ul>
-                </div>
-              )}
-            </div>
           </div>
           <p className="text-gray-400">
             Manage and showcase your technical achievements.
