@@ -1,5 +1,5 @@
-// FIX: Added useRef to imports
-import React, { useState, useEffect, useRef } from "react";
+// FIX: Added useRef and useMemo to imports
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -139,9 +139,11 @@ export default function ProjectViewModal({
     }
   }, [activeMediaIndex]);
 
-  if (!isOpen || !project) return null;
+  // --- OPTIMIZATION: Memoize Media List ---
+  // Prevents array re-creation on every re-render (like when changing slides)
+  const mediaList = useMemo(() => {
+    if (!project) return [];
 
-  const mediaList = (() => {
     const baseMedia =
       project.media && project.media.length > 0
         ? [...project.media]
@@ -167,7 +169,31 @@ export default function ProjectViewModal({
       }
     }
     return baseMedia;
-  })();
+  }, [project]); // Only recalculates if 'project' prop changes
+
+  // FIX: Moved useMemo to top level to fix ESLint error
+  const projectDescription = useMemo(
+    () => (
+      <div>
+        <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-3">
+          About Project
+        </h3>
+        <div
+          className="text-gray-400 leading-relaxed font-light break-words 
+                  [&_ul]:list-disc [&_ul]:pl-8 [&_ul]:mb-2 
+                  [&_ol]:list-decimal [&_ol]:pl-8 [&_ol]:mb-2 
+                  [&_li]:pl-1
+                  [&_a]:text-orange-400 [&_a]:underline [&_a]:hover:text-orange-300
+                  [&_b]:font-bold [&_strong]:font-bold
+                  [&_i]:italic [&_em]:italic"
+          dangerouslySetInnerHTML={{ __html: project?.description }}
+        />
+      </div>
+    ),
+    [project?.description]
+  );
+
+  if (!isOpen || !project) return null;
 
   const currentMedia = mediaList[activeMediaIndex];
 
@@ -234,6 +260,8 @@ export default function ProjectViewModal({
               <video
                 src={currentMedia.url}
                 controls
+                preload="metadata" // --- OPTIMIZATION: Only load metadata initially
+                playsInline // --- OPTIMIZATION: Better mobile memory handling
                 onLoadedData={() => setIsMediaLoaded(true)}
                 className={`max-w-full max-h-full rounded-lg shadow-lg transition-opacity duration-300 ${
                   isMediaLoaded ? "opacity-100" : "opacity-0"
@@ -268,6 +296,7 @@ export default function ProjectViewModal({
                 // --- OPTIMIZATION: Request 1280px width for main view instead of full res ---
                 src={getOptimizedUrl(currentMedia.url, 1280)}
                 alt="Project Media"
+                decoding="async" // --- OPTIMIZATION: Decode off main thread
                 onLoad={() => setIsMediaLoaded(true)}
                 className={`max-w-full max-h-full object-contain rounded-lg shadow-lg transition-opacity duration-300 ${
                   isMediaLoaded ? "opacity-100" : "opacity-0"
@@ -342,6 +371,7 @@ export default function ProjectViewModal({
                       src={getOptimizedUrl(getThumbnailUrl(m), 150)}
                       className="w-full h-full object-cover"
                       alt="thumb"
+                      decoding="async" // --- OPTIMIZATION: Decode off main thread
                     />
                   )}
 
@@ -361,7 +391,8 @@ export default function ProjectViewModal({
 
         {/* --- RIGHT SIDE: DETAILS --- */}
         <div className="w-full lg:w-1/3 flex flex-col flex-1 lg:h-full min-h-0 bg-[#0B1120]">
-          <div className="flex-1 overflow-y-auto px-8 py-8 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {/* FIX: Added 'will-change-transform' to force GPU layer for smoother scrolling */}
+          <div className="flex-1 overflow-y-auto px-8 py-8 will-change-transform [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <div className="mb-6">
               <span
                 className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-4 ${
@@ -389,21 +420,8 @@ export default function ProjectViewModal({
             </div>
 
             <div className="space-y-6">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-3">
-                  About Project
-                </h3>
-                <div
-                  className="text-gray-400 leading-relaxed font-light break-words 
-                  [&_ul]:list-disc [&_ul]:pl-8 [&_ul]:mb-2 
-                  [&_ol]:list-decimal [&_ol]:pl-8 [&_ol]:mb-2 
-                  [&_li]:pl-1
-                  [&_a]:text-orange-400 [&_a]:underline [&_a]:hover:text-orange-300
-                  [&_b]:font-bold [&_strong]:font-bold
-                  [&_i]:italic [&_em]:italic"
-                  dangerouslySetInnerHTML={{ __html: project.description }}
-                />
-              </div>
+              {/* FIX: Description is now memoized at the top level */}
+              {projectDescription}
 
               <div>
                 <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-3">
@@ -634,6 +652,8 @@ export default function ProjectViewModal({
                 <video
                   src={currentMedia.url}
                   controls
+                  preload="metadata" // --- OPTIMIZATION: Only load metadata initially
+                  playsInline // --- OPTIMIZATION: Better mobile memory handling
                   className="max-w-full max-h-full rounded-lg shadow-2xl"
                 />
               ) : currentMedia.type === "json" ||
@@ -665,6 +685,7 @@ export default function ProjectViewModal({
                   // --- OPTIMIZATION: Request 1920px width for Full Screen ---
                   src={getOptimizedUrl(currentMedia.url, 1920)}
                   alt="Full Screen"
+                  decoding="async" // --- OPTIMIZATION: Decode off main thread
                   className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
                 />
               )}

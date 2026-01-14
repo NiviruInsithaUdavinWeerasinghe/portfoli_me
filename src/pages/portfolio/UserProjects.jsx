@@ -1,29 +1,54 @@
-import React from "react";
-// import { useTheme } from "../../context/ThemeContext";
+import React, { Suspense, lazy } from "react";
+import { Loader2 } from "lucide-react";
 
-// --- PROJECT COMPONENTS ONLY ---
-import LiquidGlassUserProjects from "../../templates/liquid_glass/LiquidGlassUserProjects";
-import MinimalistUserProjects from "../../templates/minimalist/MinimalistUserProjects";
-import CyberpunkUserProjects from "../../templates/cyberpunk/CyberpunkUserProjects";
-import PaperSketchUserProjects from "../../templates/paper_sketch/PaperSketchUserProjects";
-import SkeuomorphismUserProjects from "../../templates/skeuomorphism/SkeuomorphismUserProjects";
+// --- OPTIMIZATION: Lazy Load Templates ---
+// Only the code for the active theme will be loaded into memory.
+const LiquidGlassUserProjects = lazy(() =>
+  import("../../templates/liquid_glass/LiquidGlassUserProjects")
+);
+const MinimalistUserProjects = lazy(() =>
+  import("../../templates/minimalist/MinimalistUserProjects")
+);
+const CyberpunkUserProjects = lazy(() =>
+  import("../../templates/cyberpunk/CyberpunkUserProjects")
+);
+const PaperSketchUserProjects = lazy(() =>
+  import("../../templates/paper_sketch/PaperSketchUserProjects")
+);
+const SkeuomorphismUserProjects = lazy(() =>
+  import("../../templates/skeuomorphism/SkeuomorphismUserProjects")
+);
 
 const UserProjects = () => {
-  const theme = "liquid_glass";
+  const theme = "liquid_glass"; // Ideally this comes from props or context
 
-  switch (theme) {
-    case "minimalist":
-      return <MinimalistUserProjects />;
-    case "cyberpunk":
-      return <CyberpunkUserProjects />;
-    case "paper_sketch":
-      return <PaperSketchUserProjects />;
-    case "skeuomorphism":
-      return <SkeuomorphismUserProjects />;
-    case "liquid_glass":
-    default:
-      return <LiquidGlassUserProjects />;
-  }
+  const renderTheme = () => {
+    switch (theme) {
+      case "minimalist":
+        return <MinimalistUserProjects />;
+      case "cyberpunk":
+        return <CyberpunkUserProjects />;
+      case "paper_sketch":
+        return <PaperSketchUserProjects />;
+      case "skeuomorphism":
+        return <SkeuomorphismUserProjects />;
+      case "liquid_glass":
+      default:
+        return <LiquidGlassUserProjects />;
+    }
+  };
+
+  return (
+    <Suspense
+      fallback={
+        <div className="w-full h-96 flex items-center justify-center">
+          <Loader2 className="animate-spin text-orange-500" size={32} />
+        </div>
+      }
+    >
+      {renderTheme()}
+    </Suspense>
+  );
 };
 
 export default UserProjects;
