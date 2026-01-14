@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/:username/overview",
+      "destination": "/api/profile?username=:username"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
