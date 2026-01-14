@@ -1690,12 +1690,18 @@ const LiquidGlassPortfolioLayout = () => {
                           <li>
                             Click card to view <b>Media & Details</b>.
                           </li>
-                          {/* Only show Edit/Delete tip to Owner */}
+                          {/* Only show Edit/Delete/Hide tip to Owner */}
                           {isOwner && (
-                            <li>
-                              <b>Hover</b> over image to Edit/Delete in
-                              desktops.
-                            </li>
+                            <>
+                              <li>
+                                Use the <b>Eye icon</b> to Hide projects from
+                                visitors.
+                              </li>
+                              <li>
+                                <b>Hover</b> over image to Edit/Delete in
+                                desktops.
+                              </li>
+                            </>
                           )}
                           <li>
                             {currentUser
