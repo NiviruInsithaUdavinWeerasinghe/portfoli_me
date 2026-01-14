@@ -416,7 +416,7 @@ const LiquidGlassPortfolioLayout = () => {
           `}
             >
               <NavItem
-                to={`/${username}/home`}
+                to={`/${username}/overview`}
                 icon={<User size={18} />}
                 label="Overview"
                 collapsed={headerLayout === "left" && isSidebarCollapsed}
@@ -555,7 +555,7 @@ const LiquidGlassPortfolioLayout = () => {
                     <div className="space-y-1">
                       <button
                         onClick={() => {
-                          navigate(`/${username}/home`);
+                          navigate(`/${username}/overview`);
                           setIsProfileDropdownOpen(false);
                         }}
                         className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
@@ -1190,7 +1190,7 @@ const LiquidGlassPortfolioLayout = () => {
                       {/* Dropdown Links */}
                       <div className="space-y-1">
                         <button
-                          onClick={() => navigate(`/${username}/home`)}
+                          onClick={() => navigate(`/${username}/overview`)}
                           className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white rounded-xl transition-all duration-200 text-left group"
                         >
                           <div className="p-2 rounded-lg transition-colors bg-blue-500/10 border-blue-500/10 text-blue-500">
@@ -1326,7 +1326,7 @@ const LiquidGlassPortfolioLayout = () => {
             </div>
             <nav className="flex flex-col gap-2">
               <MobileNavItem
-                to={`/${username}/home`}
+                to={`/${username}/overview`}
                 icon={<User size={18} />}
                 label="Overview"
                 onClick={() => setIsMobileMenuOpen(false)}

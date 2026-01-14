@@ -40,8 +40,8 @@ function App() {
 
           {/* The :username param captures "user1", "john_doe", etc. */}
           <Route path="/:username" element={<PortfolioLayout />}>
-            <Route index element={<Navigate to="home" replace />} />
-            <Route path="home" element={<UserHome />} />
+            <Route index element={<Navigate to="overview" replace />} />
+            <Route path="overview" element={<UserHome />} />
             <Route path="projects" element={<UserProjects />} />
             <Route path="settings" element={<UserSettings />} />
           </Route>

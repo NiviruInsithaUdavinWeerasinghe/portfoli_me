@@ -46,7 +46,7 @@ export default function Register() {
           sessionStorage.removeItem("login_redirect_to");
           navigate(redirectPath);
         } else {
-          navigate(`/${user.uid}/home`);
+          navigate(`/${user.uid}/overview`);
         }
       } else {
         setShowOnboarding(true);
@@ -125,7 +125,7 @@ export default function Register() {
       sessionStorage.removeItem("login_redirect_to");
       navigate(redirectPath);
     } else if (currentUser?.uid) {
-      navigate(`/${currentUser.uid}/home`);
+      navigate(`/${currentUser.uid}/overview`);
     }
   };
 
