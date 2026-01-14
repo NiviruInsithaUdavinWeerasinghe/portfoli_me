@@ -10,7 +10,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 
-// 1. Setup Firebase (We define it here because api/ runs separately from src/)
+// 1. Setup Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyDMMf-S1kzNMIWBxU5jFonGIfWcWh7S0c8",
   authDomain: "portfolime-d977a.firebaseapp.com",
@@ -27,7 +27,7 @@ const db = getFirestore(app);
 
 export default async function handler(req, res) {
   try {
-    const { username } = req.query;
+    const { username, page } = req.query; // Added 'page' to destructuring
 
     // 2. Fetch the LIVE index.html
     const builtFileUrl = "https://portfolime-roan.vercel.app/index.html";
@@ -50,7 +50,6 @@ export default async function handler(req, res) {
         userData = querySnapshot.docs[0].data();
       } else {
         // Strategy B: If not found, maybe the URL contains the UID directly?
-        // Let's check if a doc exists with ID = username
         const docRef = doc(db, "users", username);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
@@ -62,15 +61,21 @@ export default async function handler(req, res) {
     }
 
     // 4. Determine final Dynamic Data
-    // Use fetched data, or fallbacks if user not found
     const realName = userData?.displayName || userData?.name || username;
-    const realBio =
+
+    // --- NEW: Custom Logic based on 'page' parameter ---
+    let dynamicTitle = `${realName}'s Portfolio | PortfoliMe`;
+    let dynamicDesc =
       userData?.bio ||
       `Check out ${realName}'s projects and skills on PortfoliMe.`;
 
-    // IMAGE LOGIC:
-    // If they have a custom avatar, use it.
-    // If not, generate a specialized avatar using their name (Free service).
+    if (page === "projects") {
+      dynamicTitle = `${realName}'s Projects | PortfoliMe`;
+      dynamicDesc = `Explore the latest projects, case studies, and technical work by ${realName}.`;
+    }
+    // --------------------------------------------------
+
+    // IMAGE LOGIC (Keeps the same profile picture logic as requested)
     const realImage =
       userData?.avatar ||
       userData?.photoURL ||
@@ -78,19 +83,15 @@ export default async function handler(req, res) {
 
     // 5. Replace tags in HTML
     html = html
-      .replace(
-        /PortfoliMe - Create Your Portfolio/g,
-        `${realName}'s Portfolio | PortfoliMe`
-      )
+      .replace(/PortfoliMe - Create Your Portfolio/g, dynamicTitle)
       .replace(
         /Showcase your projects and skills with a beautiful portfolio./g,
-        realBio
+        dynamicDesc
       )
       .replace(/https:\/\/portfolime-roan.vercel.app\/logo512.png/g, realImage);
 
     // 6. Send response
     res.setHeader("Content-Type", "text/html");
-    // Cache for 10 seconds to reduce DB reads, but allow quick updates
     res.setHeader("Cache-Control", "s-maxage=10, stale-while-revalidate");
     return res.status(200).send(html);
   } catch (error) {

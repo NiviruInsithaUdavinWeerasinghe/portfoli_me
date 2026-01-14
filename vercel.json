@@ -2,7 +2,11 @@
   "rewrites": [
     {
       "source": "/:username/overview",
-      "destination": "/api/profile?username=:username"
+      "destination": "/api/profile?username=:username&page=overview"
+    },
+    {
+      "source": "/:username/projects",
+      "destination": "/api/profile?username=:username&page=projects"
     },
     {
       "source": "/(.*)",
