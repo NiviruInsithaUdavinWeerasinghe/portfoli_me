@@ -1,14 +1,20 @@
 // api/profile.js
-const fs = require("fs");
-const path = require("path");
 
 export default async function handler(req, res) {
   try {
     const { username } = req.query;
 
-    // 1. Read the index.html from the build folder
-    const filePath = path.join(process.cwd(), "public", "index.html");
-    let html = fs.readFileSync(filePath, "utf8");
+    // 1. Fetch the BUILT index.html from the live site
+    // We do this instead of fs.readFileSync because the built file has
+    // %PUBLIC_URL% replaced and contains the React <script> tags.
+    const builtFileUrl = "https://portfolime-roan.vercel.app/index.html";
+    const response = await fetch(builtFileUrl);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch source HTML: ${response.statusText}`);
+    }
+
+    let html = await response.text();
 
     // 2. Define the new Dynamic Data
     // TODO: Replace this with your actual Firebase Fetch logic later
@@ -17,7 +23,6 @@ export default async function handler(req, res) {
     const dynamicDesc = `Check out ${username}'s projects and skills on PortfoliMe.`;
 
     // 3. Replace the DEFAULT tags with DYNAMIC tags
-    // We target the specific strings we put in index.html
     html = html
       .replace(/PortfoliMe - Create Your Portfolio/g, dynamicTitle)
       .replace(
@@ -34,9 +39,9 @@ export default async function handler(req, res) {
     return res.status(200).send(html);
   } catch (error) {
     console.error("Error injecting profile metadata:", error);
-    // Fallback: serve the normal file if anything breaks
-    const filePath = path.join(process.cwd(), "public", "index.html");
-    const html = fs.readFileSync(filePath, "utf8");
-    return res.status(200).send(html);
+
+    // Fallback: If fetch fails, try to redirect to the normal hash route
+    // or just return a simple error to avoid infinite loops.
+    return res.status(500).send("Error loading profile preview.");
   }
 }
