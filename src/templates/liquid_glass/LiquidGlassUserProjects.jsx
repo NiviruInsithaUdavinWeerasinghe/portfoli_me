@@ -54,26 +54,58 @@ import ProjectCommentModal from "../../modals/ProjectCommentModal";
 import Lottie from "lottie-react"; // NEW: Import Lottie
 
 // NEW: Helper component to fetch and play Lottie JSON from a URL
+// NEW: Optimized Renderer that only loads when visible on screen
 const LottieRenderer = ({ url, className }) => {
   const [animationData, setAnimationData] = useState(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const containerRef = useRef(null);
 
   useEffect(() => {
-    if (!url) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect(); // Stop observing once visible to save resources
+        }
+      },
+      { rootMargin: "100px" } // Start loading 100px before it comes into view
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!isVisible || !url) return;
+
+    // Check if we already have it to prevent double fetching
+    if (animationData) return;
+
     fetch(url)
       .then((res) => res.json())
       .then((data) => setAnimationData(data))
       .catch((err) => console.error("Failed to load Lottie:", err));
-  }, [url]);
-
-  if (!animationData)
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-white/5">
-        <Loader2 className="animate-spin text-orange-500" size={16} />
-      </div>
-    );
+  }, [isVisible, url, animationData]);
 
   return (
-    <Lottie animationData={animationData} loop={true} className={className} />
+    <div ref={containerRef} className={`w-full h-full ${className}`}>
+      {animationData ? (
+        <Lottie
+          animationData={animationData}
+          loop={true}
+          className="w-full h-full"
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-white/5">
+          {isVisible && (
+            <Loader2 className="animate-spin text-orange-500" size={16} />
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -137,7 +169,17 @@ export default function LiquidGlassUserProjects() {
   const loading = isOwnedLoading || isCollabLoading;
 
   // UI State
-  const [viewMode, setViewMode] = useState("grid");
+  // UPDATED: Initialize from local storage to remember state on reload, default to "list"
+  const [viewMode, setViewMode] = useState(() => {
+    const savedMode = localStorage.getItem("project_view_mode");
+    return savedMode || "list";
+  });
+
+  // NEW: Persist view mode changes to local storage
+  useEffect(() => {
+    localStorage.setItem("project_view_mode", viewMode);
+  }, [viewMode]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
 
@@ -715,51 +757,67 @@ export default function LiquidGlassUserProjects() {
   );
 }
 
+// Helper to request smaller images from Cloudinary to save RAM
+const getOptimizedThumbnail = (url, width = 400) => {
+  if (!url) return "https://via.placeholder.com/400";
+  if (url.includes("cloudinary.com") && url.includes("/upload/")) {
+    // Insert transformation parameters: width 400, quality auto, format auto
+    return url.replace("/upload/", `/upload/w_${width},q_auto,f_auto/`);
+  }
+  return url;
+};
+
 // --- Sub-Components (Unchanged, included for completeness if needed) ---
-const ProjectGridCard = ({
-  project,
-  isEditMode,
-  isHighlighted,
-  currentUser,
-  isProfileOwner, // NEW: Receive ownership status
-  showLoginPrompt,
-  onLoginRedirect,
-  onCloseLoginPrompt,
-  onClick,
-  onEdit,
-  onDelete,
-  onToggleVisibility,
-  onLike,
-  onComment,
-}) => {
-  // Check if hidden for the current user AND we are on their profile
-  const isHiddenForMe =
-    isProfileOwner && project.hiddenBy?.includes(currentUser?.uid);
+// Wrap in React.memo to prevent re-rendering entire list when one thing changes
+const ProjectGridCard = React.memo(
+  ({
+    project,
+    isEditMode,
+    isHighlighted,
+    currentUser,
+    isProfileOwner,
+    showLoginPrompt,
+    onLoginRedirect,
+    onCloseLoginPrompt,
+    onClick,
+    onEdit,
+    onDelete,
+    onToggleVisibility,
+    onLike,
+    onComment,
+  }) => {
+    const isHiddenForMe =
+      isProfileOwner && project.hiddenBy?.includes(currentUser?.uid);
+    const visibleTags = project.tags?.slice(0, 4) || [];
+    const remainingCount = project.tags?.length - visibleTags.length;
+    const CHAR_LIMIT = 12;
+    const isLiked = project.likedBy?.includes(currentUser?.uid);
 
-  const visibleTags = project.tags?.slice(0, 4) || [];
-  const remainingCount = project.tags?.length - visibleTags.length;
-  const CHAR_LIMIT = 12;
-  const isLiked = project.likedBy?.includes(currentUser?.uid);
+    const getFormattedDate = () => {
+      if (!project.startDate) return null;
+      const options = { year: "numeric", month: "short" };
+      const start = new Date(project.startDate).toLocaleDateString(
+        "en-US",
+        options
+      );
+      const end = project.endDate
+        ? new Date(project.endDate).toLocaleDateString("en-US", options)
+        : "Present";
+      return `${start} - ${end}`;
+    };
 
-  const getFormattedDate = () => {
-    if (!project.startDate) return null;
-    const options = { year: "numeric", month: "short" };
-    const start = new Date(project.startDate).toLocaleDateString(
-      "en-US",
-      options
+    const dateString = getFormattedDate();
+
+    // Use optimized image URL
+    const optimizedImage = useMemo(
+      () => getOptimizedThumbnail(project.image),
+      [project.image]
     );
-    const end = project.endDate
-      ? new Date(project.endDate).toLocaleDateString("en-US", options)
-      : "Present";
-    return `${start} - ${end}`;
-  };
 
-  const dateString = getFormattedDate();
-
-  return (
-    <div
-      onClick={onClick}
-      className={`
+    return (
+      <div
+        onClick={onClick}
+        className={`
         group relative backdrop-blur-md rounded-2xl overflow-hidden transition-all cursor-pointer flex flex-col h-full duration-500
         ${
           isHighlighted
@@ -767,215 +825,215 @@ const ProjectGridCard = ({
             : "bg-gray-900/40 border border-white/10 hover:border-orange-500/30 hover:shadow-2xl"
         }
       `}
-    >
-      {/* Reduced height on mobile (h-32) so 2 columns don't look like skyscrapers */}
-      <div className="relative h-32 sm:h-48 overflow-hidden">
-        {/* NEW: Check for Lottie JSON or Image */}
-        {project.image?.endsWith(".json") ? (
-          <div className="w-full h-full transition-transform duration-500 group-hover:scale-110 bg-black/20 p-2">
-            <LottieRenderer url={project.image} className="w-full h-full" />
-          </div>
-        ) : (
-          <img
-            src={project.image || "https://via.placeholder.com/400"}
-            alt={project.title}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-          />
-        )}
-
-        {/* UPDATED: Moved status to bottom-3 left-3 so it doesn't collide with top-right edit buttons */}
-        <div className="absolute bottom-3 left-3 px-2.5 py-1 bg-black/40 backdrop-blur-md border border-white/10 rounded-lg flex items-center gap-1.5">
-          {project.status === "Completed" ? (
-            <CheckCircle2 size={12} className="text-green-400" />
+      >
+        <div className="relative h-32 sm:h-48 overflow-hidden bg-black/20">
+          {project.image?.endsWith(".json") ? (
+            <div className="w-full h-full transition-transform duration-500 group-hover:scale-110 p-2">
+              <LottieRenderer url={project.image} className="w-full h-full" />
+            </div>
           ) : (
-            <Clock size={12} className="text-orange-500" />
+            <img
+              src={optimizedImage} // USING OPTIMIZED URL
+              alt={project.title}
+              loading="lazy" // NATIVE BROWSER LAZY LOADING
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+            />
           )}
-          <span className="text-[10px] font-bold uppercase tracking-wider text-white/90">
-            {project.status}
-          </span>
-          {/* NEW: Clear indication if hidden */}
-          {isHiddenForMe && (
-            <div className="flex items-center gap-1 pl-2 border-l border-white/20 ml-2 text-orange-400 animate-pulse">
-              <EyeOff size={10} strokeWidth={3} />
-              <span className="text-[9px] font-bold uppercase tracking-wide">
-                Hidden
+
+          {/* Status Badges */}
+          {/* FIX: stacked in col on mobile, row on desktop */}
+          <div className="absolute bottom-3 left-3 max-w-[calc(100%-1rem)] px-2.5 py-1.5 bg-black/40 backdrop-blur-md border border-white/10 rounded-lg flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 shadow-lg items-start">
+            <div className="flex items-center gap-1.5">
+              {project.status === "Completed" ? (
+                <CheckCircle2 size={12} className="text-green-400" />
+              ) : (
+                <Clock size={12} className="text-orange-500" />
+              )}
+              <span className="text-[10px] font-bold uppercase tracking-wider text-white/90 truncate">
+                {project.status}
               </span>
             </div>
-          )}
-        </div>
-        {/* UPDATED: Show actions if in edit mode. Hide is available for all, Edit/Delete only for owners */}
-        {isEditMode && (
-          /* FIX: Changed opacity to be visible by default, and only apply hover-hide logic on Large screens (lg) */
-          <div className="absolute top-3 right-3 flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-            {/* NEW: Hide/Unhide Button placed left of Edit */}
-            <button
-              onClick={onToggleVisibility}
-              title={isHiddenForMe ? "Make Visible" : "Hide from others"}
-              className={`p-1.5 sm:p-2 backdrop-blur-md border rounded-lg hover:scale-105 transition-all ${
-                isHiddenForMe
-                  ? "bg-orange-500/20 border-orange-500/50 text-orange-500 hover:bg-orange-500 hover:text-white"
-                  : "bg-black/40 border-white/10 text-white hover:text-gray-300"
-              }`}
-            >
-              {isHiddenForMe ? (
-                <EyeOff size={12} className="sm:w-[14px] sm:h-[14px]" />
-              ) : (
-                <Eye size={12} className="sm:w-[14px] sm:h-[14px]" />
-              )}
-            </button>
-            {project.isOwned && (
-              <>
-                <button
-                  onClick={onEdit}
-                  className="p-1.5 sm:p-2 bg-black/40 backdrop-blur-md border border-white/10 text-white hover:text-orange-400 rounded-lg hover:scale-105 transition-all"
-                >
-                  <Edit2 size={12} className="sm:w-[14px] sm:h-[14px]" />
-                </button>
-                <button
-                  onClick={onDelete}
-                  className="p-1.5 sm:p-2 bg-black/40 backdrop-blur-md border border-white/10 text-red-400 hover:text-red-500 rounded-lg hover:scale-105 transition-all"
-                >
-                  <Trash2 size={12} className="sm:w-[14px] sm:h-[14px]" />
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-      {/* Reduced padding (p-3) on mobile to save vertical space */}
-      <div className="p-3 sm:p-6 flex flex-col flex-grow">
-        {dateString && (
-          <div className="flex items-center gap-2 mb-2 sm:mb-3 text-[10px] sm:text-xs text-gray-500 font-medium">
-            <Calendar size={12} className="sm:w-[14px] sm:h-[14px]" />{" "}
-            {dateString}
-          </div>
-        )}
-
-        <h3
-          title={project.title}
-          // Smaller font on mobile
-          className="text-sm sm:text-lg font-bold text-white mb-1.5 sm:mb-2 group-hover:text-orange-500 transition-colors truncate"
-        >
-          {project.title}
-        </h3>
-        <div
-          // Tighter line clamp (2 lines) and smaller text on mobile
-          // UPDATED: Added 'overflow-hidden' and explicit line-heights (leading-4/leading-5) to match the fixed height calculations exactly.
-          // Added '[&_*]:m-0 [&_*]:p-0' to strip any margins/padding from the injected HTML content.
-          className="text-gray-400 text-xs sm:text-sm mb-3 sm:mb-6 line-clamp-2 sm:line-clamp-3 h-8 sm:h-[60px] break-words overflow-hidden leading-4 sm:leading-5 [&_*]:inline [&_*]:m-0 [&_*]:p-0"
-          dangerouslySetInnerHTML={{ __html: project.description }}
-        />
-        <div className="flex flex-col gap-3 sm:gap-4 pt-3 sm:pt-4 border-t border-white/5 mt-auto">
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            {visibleTags.map((tag, i) => (
-              <span
-                key={i}
-                title={tag.length > CHAR_LIMIT ? tag : ""}
-                className="px-1.5 py-0.5 sm:px-2 sm:py-1 text-[9px] sm:text-[10px] bg-white/5 text-gray-400 rounded border border-white/5 whitespace-nowrap"
-              >
-                {tag.length > CHAR_LIMIT
-                  ? `${tag.substring(0, CHAR_LIMIT)}...`
-                  : tag}
-              </span>
-            ))}
-            {remainingCount > 0 && (
-              <span className="text-[9px] sm:text-[10px] text-orange-500 font-medium whitespace-nowrap">
-                +{remainingCount} more
-              </span>
+            {isHiddenForMe && (
+              <div className="flex items-center gap-1 text-orange-400 sm:pl-2 sm:border-l sm:border-white/20">
+                <EyeOff size={10} strokeWidth={3} />
+                <span className="text-[9px] font-bold uppercase tracking-wide">
+                  Hidden
+                </span>
+              </div>
             )}
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-3">
+          {/* Edit Controls */}
+          {isEditMode && (
+            <div className="absolute top-3 right-3 flex gap-2 opacity-100 xl:opacity-0 xl:group-hover:opacity-100 transition-opacity">
               <button
-                onClick={onLike}
-                // Removed disabled prop so guests get the alert message
-                className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-bold transition-colors ${
-                  isLiked
-                    ? "text-blue-500"
-                    : "text-gray-500 hover:text-blue-500"
+                onClick={onToggleVisibility}
+                title={isHiddenForMe ? "Make Visible" : "Hide from others"}
+                className={`p-1.5 sm:p-2 backdrop-blur-md border rounded-lg hover:scale-105 transition-all ${
+                  isHiddenForMe
+                    ? "bg-orange-500/20 border-orange-500/50 text-orange-500 hover:bg-orange-500 hover:text-white"
+                    : "bg-black/40 border-white/10 text-white hover:text-gray-300"
                 }`}
               >
-                <ThumbsUp
-                  size={14}
-                  className="sm:w-[16px] sm:h-[16px]"
-                  fill={isLiked ? "currentColor" : "none"}
-                />
-                <span>{project.appreciation || 0}</span>
+                {isHiddenForMe ? (
+                  <EyeOff size={12} className="sm:w-[14px] sm:h-[14px]" />
+                ) : (
+                  <Eye size={12} className="sm:w-[14px] sm:h-[14px]" />
+                )}
+              </button>
+              {project.isOwned && (
+                <>
+                  <button
+                    onClick={onEdit}
+                    className="p-1.5 sm:p-2 bg-black/40 backdrop-blur-md border border-white/10 text-white hover:text-orange-400 rounded-lg hover:scale-105 transition-all"
+                  >
+                    <Edit2 size={12} className="sm:w-[14px] sm:h-[14px]" />
+                  </button>
+                  <button
+                    onClick={onDelete}
+                    className="p-1.5 sm:p-2 bg-black/40 backdrop-blur-md border border-white/10 text-red-400 hover:text-red-500 rounded-lg hover:scale-105 transition-all"
+                  >
+                    <Trash2 size={12} className="sm:w-[14px] sm:h-[14px]" />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="p-3 sm:p-6 flex flex-col flex-grow">
+          {dateString && (
+            <div className="flex items-center gap-2 mb-2 sm:mb-3 text-[10px] sm:text-xs text-gray-500 font-medium">
+              <Calendar size={12} className="sm:w-[14px] sm:h-[14px]" />{" "}
+              {dateString}
+            </div>
+          )}
+
+          <h3
+            title={project.title}
+            className="text-sm sm:text-lg font-bold text-white mb-1.5 sm:mb-2 group-hover:text-orange-500 transition-colors truncate"
+          >
+            {project.title}
+          </h3>
+
+          <div
+            className="text-gray-400 text-xs sm:text-sm mb-3 sm:mb-6 line-clamp-2 sm:line-clamp-3 h-8 sm:h-[60px] break-words overflow-hidden leading-4 sm:leading-5 [&_*]:inline [&_*]:m-0 [&_*]:p-0"
+            dangerouslySetInnerHTML={{ __html: project.description }}
+          />
+
+          <div className="flex flex-col gap-3 sm:gap-4 pt-3 sm:pt-4 border-t border-white/5 mt-auto">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              {visibleTags.map((tag, i) => (
+                <span
+                  key={i}
+                  className="px-1.5 py-0.5 sm:px-2 sm:py-1 text-[9px] sm:text-[10px] bg-white/5 text-gray-400 rounded border border-white/5 whitespace-nowrap"
+                >
+                  {tag.length > CHAR_LIMIT
+                    ? `${tag.substring(0, CHAR_LIMIT)}...`
+                    : tag}
+                </span>
+              ))}
+              {remainingCount > 0 && (
+                <span className="text-[9px] sm:text-[10px] text-orange-500 font-medium whitespace-nowrap">
+                  +{remainingCount} more
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <button
+                  onClick={onLike}
+                  className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-bold transition-colors ${
+                    isLiked
+                      ? "text-blue-500"
+                      : "text-gray-500 hover:text-blue-500"
+                  }`}
+                >
+                  <ThumbsUp
+                    size={14}
+                    className="sm:w-[16px] sm:h-[16px]"
+                    fill={isLiked ? "currentColor" : "none"}
+                  />
+                  <span>{project.appreciation || 0}</span>
+                </button>
+                <button
+                  onClick={onComment}
+                  className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-bold text-gray-500 hover:text-white transition-colors"
+                >
+                  <MessageSquare
+                    size={14}
+                    className="sm:w-[16px] sm:h-[16px]"
+                  />
+                  <span>{project.commentsCount || 0}</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 sm:gap-3">
+                {project.githubLink && (
+                  <a
+                    href={project.githubLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-gray-500 hover:text-white transition-colors"
+                  >
+                    <Github size={16} className="sm:w-[18px] sm:h-[18px]" />
+                  </a>
+                )}
+                {project.liveLink && (
+                  <a
+                    href={project.liveLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-gray-500 hover:text-orange-500 transition-colors"
+                  >
+                    <ExternalLink
+                      size={16}
+                      className="sm:w-[18px] sm:h-[18px]"
+                    />
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {showLoginPrompt && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-900/95 backdrop-blur-sm animate-in fade-in duration-200 p-4 sm:p-6 text-center border-2 border-orange-500/50 rounded-2xl">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-500/20 rounded-full flex items-center justify-center mb-2 sm:mb-3">
+              <LogIn
+                className="text-orange-500 sm:w-[24px] sm:h-[24px]"
+                size={20}
+              />
+            </div>
+            <h4 className="text-sm sm:text-lg font-bold text-white mb-1">
+              Sign in to Like
+            </h4>
+            <p className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6">
+              Join the community.
+            </p>
+            <div className="flex gap-2 sm:gap-3 w-full">
+              <button
+                onClick={onCloseLoginPrompt}
+                className="flex-1 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
+              >
+                Cancel
               </button>
               <button
-                onClick={onComment}
-                className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-bold text-gray-500 hover:text-white transition-colors"
+                onClick={onLoginRedirect}
+                className="flex-1 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold text-white bg-orange-600 hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20"
               >
-                <MessageSquare size={14} className="sm:w-[16px] sm:h-[16px]" />
-                <span>{project.commentsCount || 0}</span>
+                Login
               </button>
             </div>
-
-            <div className="flex items-center gap-2 sm:gap-3">
-              {project.githubLink && (
-                <a
-                  href={project.githubLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-gray-500 hover:text-white transition-colors"
-                  title="View Code"
-                >
-                  <Github size={16} className="sm:w-[18px] sm:h-[18px]" />
-                </a>
-              )}
-              {project.liveLink && (
-                <a
-                  href={project.liveLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-gray-500 hover:text-orange-500 transition-colors"
-                  title="Live Demo"
-                >
-                  <ExternalLink size={16} className="sm:w-[18px] sm:h-[18px]" />
-                </a>
-              )}
-            </div>
           </div>
-        </div>
+        )}
       </div>
-
-      {/* NEW: Login Prompt Overlay */}
-      {showLoginPrompt && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-900/95 backdrop-blur-sm animate-in fade-in duration-200 p-4 sm:p-6 text-center border-2 border-orange-500/50 rounded-2xl">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-500/20 rounded-full flex items-center justify-center mb-2 sm:mb-3">
-            <LogIn
-              className="text-orange-500 sm:w-[24px] sm:h-[24px]"
-              size={20}
-            />
-          </div>
-          <h4 className="text-sm sm:text-lg font-bold text-white mb-1">
-            Sign in to Like
-          </h4>
-          <p className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6">
-            Join the community to interact with projects.
-          </p>
-          <div className="flex gap-2 sm:gap-3 w-full">
-            <button
-              onClick={onCloseLoginPrompt}
-              className="flex-1 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onLoginRedirect}
-              className="flex-1 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold text-white bg-orange-600 hover:bg-orange-500 transition-colors shadow-lg shadow-orange-900/20"
-            >
-              Login
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+    );
+  }
+);
 
 const ProjectListCard = ({
   project,

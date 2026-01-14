@@ -25,12 +25,11 @@ import {
   Link as LinkIcon,
   Info,
   Users,
-  FileJson, // NEW: Added FileJson Icon
+  FileJson,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-// NEW: Added Firestore query functions
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
-import { db } from "../lib/firebase"; // Ensure db is imported
+import { db } from "../lib/firebase";
 import { uploadFileToCloudinary } from "../services/cloudinaryService";
 import { fetchUserProfile } from "../services/profileOverviewService";
 import { decryptData } from "../lib/secureStorage";
@@ -38,30 +37,70 @@ import {
   fetchUserRepositories,
   fetchRepoLanguages,
 } from "../services/githubService";
-import Lottie from "lottie-react"; // NEW: Import Lottie Player
+import Lottie from "lottie-react";
 
-// NEW: Helper component to fetch and play Lottie JSON from a URL
+// --- OPTIMIZED: Lazy Load Lottie Files ---
+// Prevents Main Thread Blocking on initial render
 const LottieRenderer = ({ url, className }) => {
   const [animationData, setAnimationData] = useState(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const containerRef = useRef(null);
 
   useEffect(() => {
-    if (!url) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "100px" }
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!url || !isVisible) return;
+    if (animationData) return; // Prevent double fetch
+
     fetch(url)
       .then((res) => res.json())
       .then((data) => setAnimationData(data))
       .catch((err) => console.error("Failed to load Lottie:", err));
-  }, [url]);
-
-  if (!animationData)
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-white/5">
-        <Loader2 className="animate-spin text-orange-500" size={16} />
-      </div>
-    );
+  }, [url, isVisible, animationData]);
 
   return (
-    <Lottie animationData={animationData} loop={true} className={className} />
+    <div ref={containerRef} className={`w-full h-full ${className}`}>
+      {animationData ? (
+        <Lottie
+          animationData={animationData}
+          loop={true}
+          className="w-full h-full"
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-white/5">
+          {isVisible && (
+            <Loader2 className="animate-spin text-orange-500" size={16} />
+          )}
+        </div>
+      )}
+    </div>
   );
+};
+
+// --- OPTIMIZED: Cloudinary Image Resizer ---
+// Forces images to be small thumbnails to save RAM
+const getOptimizedUrl = (url, width = 300) => {
+  if (!url) return "";
+  if (url.includes("cloudinary.com") && url.includes("/upload/")) {
+    return url.replace("/upload/", `/upload/w_${width},q_auto,f_auto/`);
+  }
+  return url;
 };
 
 export default function AddEditProjectModal({
@@ -71,13 +110,9 @@ export default function AddEditProjectModal({
   onSave,
 }) {
   const { currentUser } = useAuth();
-
-  // Ref to manage the editor DOM element directly
   const editorRef = useRef(null);
-  // NEW: Ref to manage the main modal container for Focus (needed for Ctrl+V)
   const modalRef = useRef(null);
 
-  // NEW: Auto-focus the modal when it opens to capture Paste events
   useEffect(() => {
     if (isOpen && modalRef.current) {
       modalRef.current.focus();
@@ -95,15 +130,13 @@ export default function AddEditProjectModal({
     tags: [],
     media: [],
     thumbnail: "",
-    collaborators: [], // NEW: Initialize collaborators
+    collaborators: [],
   });
 
-  // --- NEW: Collaborator Search State & Logic ---
   const [collabSearch, setCollabSearch] = useState("");
   const [collabResults, setCollabResults] = useState([]);
   const [isSearchingCollabs, setIsSearchingCollabs] = useState(false);
 
-  // Debounced Search Effect
   useEffect(() => {
     const searchUsers = async () => {
       if (!collabSearch.trim()) {
@@ -115,14 +148,10 @@ export default function AddEditProjectModal({
       try {
         const usersRef = collection(db, "users");
         const searchTerm = collabSearch.trim();
-
-        // Helper: Firestore is case-sensitive.
-        // We prepare both capitalized (Niviru) and lowercase (niviru) terms.
         const capitalizedTerm =
           searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1);
         const lowerTerm = searchTerm.toLowerCase();
 
-        // 1. Search by Display Name (Prefix)
         const qDisplayName = query(
           usersRef,
           where("displayName", ">=", capitalizedTerm),
@@ -130,7 +159,6 @@ export default function AddEditProjectModal({
           limit(5)
         );
 
-        // 2. Search by Name field (Prefix)
         const qName = query(
           usersRef,
           where("name", ">=", capitalizedTerm),
@@ -138,7 +166,6 @@ export default function AddEditProjectModal({
           limit(5)
         );
 
-        // 3. Search by GitHub Username (Prefix)
         const qGithub = query(
           usersRef,
           where("githubUsername", ">=", capitalizedTerm),
@@ -146,7 +173,6 @@ export default function AddEditProjectModal({
           limit(5)
         );
 
-        // 4. Search by Email (Prefix)
         const qEmail = query(
           usersRef,
           where("email", ">=", lowerTerm),
@@ -164,15 +190,10 @@ export default function AddEditProjectModal({
 
         const results = new Map();
 
-        // Helper to add user if not self and not already selected
         const addUser = (doc) => {
           const data = doc.data();
           const uid = doc.id;
-
-          // Exclude current user (Safe check for guests)
           if (currentUser && uid === currentUser.uid) return;
-
-          // FIX: Added optional chaining (?.) to prevent crash if collaborators is undefined
           if (formData.collaborators?.some((c) => c.uid === uid)) return;
 
           if (!results.has(uid)) {
@@ -200,9 +221,8 @@ export default function AddEditProjectModal({
       }
     };
 
-    const timeoutId = setTimeout(searchUsers, 500); // 500ms debounce
+    const timeoutId = setTimeout(searchUsers, 500);
     return () => clearTimeout(timeoutId);
-    // FIXED: Used currentUser?.uid to safely handle null users (guests)
   }, [collabSearch, currentUser?.uid, formData.collaborators]);
 
   const addCollaborator = (user) => {
@@ -210,8 +230,8 @@ export default function AddEditProjectModal({
       ...prev,
       collaborators: [...(prev.collaborators || []), user],
     }));
-    setCollabSearch(""); // Clear search
-    setCollabResults([]); // Clear results
+    setCollabSearch("");
+    setCollabResults([]);
   };
 
   const removeCollaborator = (uid) => {
@@ -221,13 +241,10 @@ export default function AddEditProjectModal({
     }));
   };
 
-  // NEW: Track original data for unsaved changes detection
   const [initialFormData, setInitialFormData] = useState(null);
 
-  // NEW: Warn user about unsaved changes on page reload/close
   useEffect(() => {
     const handleBeforeUnload = (e) => {
-      // Check if formData matches initialFormData
       if (
         initialFormData &&
         JSON.stringify(formData) !== JSON.stringify(initialFormData)
@@ -245,104 +262,60 @@ export default function AddEditProjectModal({
   const [repos, setRepos] = useState([]);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [githubToken, setGithubToken] = useState(null);
-
-  // UPDATED: Use a counter to track multiple concurrent/queued uploads
   const [uploadCounter, setUploadCounter] = useState(0);
-  const uploading = uploadCounter > 0; // Derived state for UI
-
-  // NEW: A Promise Queue to ensure batches are processed in strict order (First In, First Out)
+  const uploading = uploadCounter > 0;
   const uploadQueue = useRef(Promise.resolve());
-
-  // NEW: Ref to track cancellation request
   const uploadCancelledRef = useRef(false);
-
   const [tagInput, setTagInput] = useState("");
   const [error, setError] = useState("");
-  const [isDragging, setIsDragging] = useState(false); // NEW: Drag state
+  const [isDragging, setIsDragging] = useState(false);
 
-  // NEW: Handler to stop upload and prevent state updates
   const handleStopUpload = () => {
     if (uploading) {
       uploadCancelledRef.current = true;
-      setUploadCounter(0); // Force UI to stop loading state
+      setUploadCounter(0);
       setError("Upload stopped by user.");
     }
   };
 
-  // NEW: Wrapper to safely close modal and stop background uploads
   const handleSafeClose = () => {
     handleStopUpload();
     onClose();
   };
 
-  // --- Text Editor State & Logic ---
   const [showLinkModal, setShowLinkModal] = useState(false);
-  const [activeListMenu, setActiveListMenu] = useState(null); // 'ul' | 'ol' | null
+  const [activeListMenu, setActiveListMenu] = useState(null);
   const [linkData, setLinkData] = useState({ text: "", url: "" });
   const [savedSelection, setSavedSelection] = useState(null);
   const [activeFormats, setActiveFormats] = useState({});
 
-  // NEW: Logic to handle smart list numbering (Reset on text, continue on sub-bullets/breaks)
-  // NEW: Advanced Logic to handle lists wrapped in divs and sibling lists
   const updateListNumbering = () => {
     if (!editorRef.current) return;
-
     let currentCount = 1;
-
-    // Recursive helper to process nodes and their children
     const processNode = (node) => {
       if (node.nodeType !== Node.ELEMENT_NODE) return;
-
       const tagName = node.tagName.toLowerCase();
-
-      // 1. If it's an Ordered List (<ol>)
       if (tagName === "ol") {
         node.setAttribute("start", currentCount);
-
-        // Count only direct <li> children to avoid counting nested sub-items
-        // This ensures <ol><li>Item 1 <ol><li>SubItem</li></ol></li></ol> only counts as 1
         let directLiCount = 0;
         Array.from(node.children).forEach((child) => {
           if (child.tagName.toLowerCase() === "li") directLiCount++;
         });
-
-        // Fallback: If <li> are buried (e.g. inside invalid <ul> children of <ol>), counting all <li> might be safer visually
-        // But for standard structure, direct children is correct.
-        // In your specific "sdfsd" case, 'sdfsd' is a direct LI, so this works.
         currentCount += directLiCount;
         return;
       }
-
-      // 2. If it's an Unordered List (<ul>)
-      if (tagName === "ul") {
-        // Do not reset count. Do not increment count.
-        // Just skip it so the sequence continues across it.
-        return;
-      }
-
-      // 3. If it's a container (<div> or <p>) that might contain lists
+      if (tagName === "ul") return;
       const hasListChildren = Array.from(node.children).some((child) =>
         ["ol", "ul"].includes(child.tagName.toLowerCase())
       );
-
       if (hasListChildren) {
-        // If it wraps lists, drill down and process children sequentially
         Array.from(node.children).forEach((child) => processNode(child));
         return;
       }
-
-      // 4. If it's a text block (and we haven't returned yet)
       const text = node.textContent || "";
       const hasText = text.trim().length > 0;
-
-      // If it has actual text, it breaks the numbering sequence -> Reset to 1
-      if (hasText) {
-        currentCount = 1;
-      }
-      // If it's empty (like <br> or empty <div>), we do nothing, preserving the count
+      if (hasText) currentCount = 1;
     };
-
-    // Start processing from the editor's top-level children
     Array.from(editorRef.current.children).forEach((child) =>
       processNode(child)
     );
@@ -387,7 +360,7 @@ export default function AddEditProjectModal({
   const execCommand = (command, value = null) => {
     document.execCommand(command, false, value);
     checkFormats();
-    updateListNumbering(); // Update numbering on command
+    updateListNumbering();
     if (editorRef.current) {
       setFormData((prev) => ({
         ...prev,
@@ -403,7 +376,7 @@ export default function AddEditProjectModal({
       const command = e.shiftKey ? "outdent" : "indent";
       document.execCommand(command);
       checkFormats();
-      updateListNumbering(); // Update numbering on tab
+      updateListNumbering();
       if (editorRef.current) {
         setFormData((prev) => ({
           ...prev,
@@ -413,18 +386,12 @@ export default function AddEditProjectModal({
     }
   };
 
-  // ... (Keep existing applyListStyle, saveSelection, restoreSelection, handleInsertLink functions exactly as they were) ...
-  // To save space in chat, I am assuming you keep the helper functions here.
-  // Just ensure updateListNumbering() is called whenever content changes (see below in the JSX).
-
   const applyListStyle = (cmd, styleValue) => {
     const isOrdered = cmd === "insertOrderedList";
     const currentState = document.queryCommandState(cmd);
-
     if (!currentState) {
       document.execCommand(cmd);
     }
-
     const selection = window.getSelection();
     if (selection.rangeCount > 0) {
       let node = selection.anchorNode;
@@ -448,9 +415,8 @@ export default function AddEditProjectModal({
         node = node.parentNode;
       }
     }
-
     checkFormats();
-    updateListNumbering(); // Update numbering on style change
+    updateListNumbering();
     if (editorRef.current) {
       setFormData((prev) => ({
         ...prev,
@@ -485,14 +451,12 @@ export default function AddEditProjectModal({
     } else if (linkData.url) {
       document.execCommand("createLink", false, linkData.url);
     }
-
     if (editorRef.current) {
       setFormData((prev) => ({
         ...prev,
         description: editorRef.current.innerHTML,
       }));
     }
-
     setShowLinkModal(false);
     setLinkData({ text: "", url: "" });
   };
@@ -500,7 +464,6 @@ export default function AddEditProjectModal({
   const handleRemoveLink = () => {
     restoreSelection();
     document.execCommand("unlink", false, null);
-
     if (editorRef.current) {
       setFormData((prev) => ({
         ...prev,
@@ -511,41 +474,34 @@ export default function AddEditProjectModal({
     setLinkData({ text: "", url: "" });
   };
 
-  // UI States
   const [previewItem, setPreviewItem] = useState(null);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const statusOptions = ["Ongoing", "Completed", "On Hold"];
 
   useEffect(() => {
-    // Reset UI states (Dropdowns, Help Text, Modals) whenever modal opens/closes
     setShowLinkModal(false);
     setActiveListMenu(null);
     setIsStatusOpen(false);
     setShowMediaHelp(false);
-    setIsEditingMedia(false); // Reset edit mode
-    setPreviewItem(null); // Reset preview overlay
-
-    // Reset Editor Toolbar States (Bold, Italic, List Styles, Links, etc.)
+    setIsEditingMedia(false);
+    setPreviewItem(null);
     setActiveFormats({});
     setLinkData({ text: "", url: "" });
 
-    let startData; // Helper to capture the baseline state
-
+    let startData;
     if (initialData) {
       startData = {
         ...initialData,
         startDate: initialData.startDate || "",
         endDate: initialData.endDate || "",
         thumbnail: initialData.thumbnail || initialData.image || "",
-        // FIX: Ensure collaborators is always an array, even if missing in DB
         collaborators: initialData.collaborators || [],
       };
       setFormData(startData);
-      setInitialFormData(startData); // NEW: Set baseline for comparison
-
+      setInitialFormData(startData);
       if (editorRef.current) {
         editorRef.current.innerHTML = initialData.description || "";
-        updateListNumbering(); // Run logic on load
+        updateListNumbering();
       }
     } else {
       startData = {
@@ -559,21 +515,16 @@ export default function AddEditProjectModal({
         tags: [],
         media: [],
         thumbnail: "",
-        collaborators: [], // NEW
+        collaborators: [],
       };
       setFormData(startData);
-      setInitialFormData(startData); // NEW: Set baseline for comparison
-
+      setInitialFormData(startData);
       if (editorRef.current) {
         editorRef.current.innerHTML = "";
       }
     }
   }, [initialData, isOpen]);
 
-  // ... (Keep existing useEffect for repos, handleChange, handleFileChange, removeMedia, setAsThumbnail, handleTagKeyDown, handleRepoSelect, getPreviewUrl, handleSubmit, renderPreviewItem, Lightbox logic, Drag and Drop logic, Edit Mode logic) ...
-  // [OMITTED FOR BREVITY - KEEP YOUR EXISTING CODE FOR THESE FUNCTIONS]
-
-  // Re-inserting the essential hooks/funcs just to be safe for the "replace" context:
   useEffect(() => {
     if (isOpen) setError("");
     const loadRepos = async () => {
@@ -584,7 +535,6 @@ export default function AddEditProjectModal({
         const username =
           userProfile?.githubUsername ||
           currentUser?.reloadUserInfo?.screenName;
-        // DECRYPT TOKEN BEFORE USE
         const token = userProfile?.githubToken
           ? decryptData(userProfile.githubToken)
           : "";
@@ -608,33 +558,29 @@ export default function AddEditProjectModal({
     if (name === "startDate" || name === "endDate") setError("");
   };
 
-  // NEW: Helper to validate if a JSON file contains Lottie animation data
   const validateLottieFile = (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
           const data = JSON.parse(e.target.result);
-          // Lottie files MUST have 'v' (version) and 'layers' keys to be valid
           if (data && typeof data === "object" && data.v && data.layers) {
             resolve(true);
           } else {
             resolve(false);
           }
         } catch (err) {
-          resolve(false); // Parse error
+          resolve(false);
         }
       };
-      reader.onerror = () => resolve(false); // Read error
+      reader.onerror = () => resolve(false);
       reader.readAsText(file);
     });
   };
 
-  // Reusable function to process files from Input, Drop, or Paste
   const processFiles = async (files) => {
     if (files.length === 0) return;
 
-    // 1. Basic MIME/Extension Validation
     const hasInvalidTypes = files.some((file) => {
       const isImage = file.type.startsWith("image/");
       const isVideo = file.type.startsWith("video/");
@@ -643,7 +589,7 @@ export default function AddEditProjectModal({
         file.name.toLowerCase().endsWith(".pdf");
       const isJson =
         file.type === "application/json" ||
-        file.name.toLowerCase().endsWith(".json"); // NEW: Support JSON
+        file.name.toLowerCase().endsWith(".json");
       return !isImage && !isVideo && !isPdf && !isJson;
     });
 
@@ -654,8 +600,6 @@ export default function AddEditProjectModal({
       return;
     }
 
-    // 2. Advanced Lottie Content Validation
-    // We iterate specifically to check JSON content before allowing upload
     for (const file of files) {
       const isJson =
         file.type === "application/json" ||
@@ -665,20 +609,16 @@ export default function AddEditProjectModal({
         const isValidLottie = await validateLottieFile(file);
         if (!isValidLottie) {
           setError(`"${file.name}" is not a valid Lottie animation file.`);
-          return; // Stop the upload process immediately
+          return;
         }
       }
     }
 
     setError("");
-
-    // 1. Immediately signal that uploading has started (increments counter)
     setUploadCounter((prev) => prev + 1);
-    uploadCancelledRef.current = false; // Reset cancellation flag on new upload
+    uploadCancelledRef.current = false;
 
-    // 2. Add this batch to the Queue.
     uploadQueue.current = uploadQueue.current.then(async () => {
-      // CHECK: If cancelled before this batch starts, skip
       if (uploadCancelledRef.current) {
         setUploadCounter((prev) => Math.max(0, prev - 1));
         return;
@@ -688,19 +628,13 @@ export default function AddEditProjectModal({
         const uploadPromises = files.map((file) =>
           uploadFileToCloudinary(file)
         );
-        // Wait for all files in *this* specific batch to finish
         const uploadedMedia = await Promise.all(uploadPromises);
 
-        // CHECK: If cancelled during upload, do not update state
         if (uploadCancelledRef.current) return;
 
-        // Update State (Show previews only after this batch is fully done)
         setFormData((prev) => {
           const currentMedia = prev.media || [];
-          // Appending to the end ensures order is preserved based on queue execution
           const allMedia = [...currentMedia, ...uploadedMedia];
-
-          // Find the first non-video item to use as thumbnail if one isn't set
           const firstValidImage = allMedia.find((m) => m.type !== "video");
           const newThumbnail =
             !prev.thumbnail && firstValidImage
@@ -714,7 +648,6 @@ export default function AddEditProjectModal({
           };
         });
 
-        // Also update tempMedia if we are currently in edit mode
         if (isEditingMedia) {
           setTempMedia((prev) => [...prev, ...uploadedMedia]);
         }
@@ -724,7 +657,6 @@ export default function AddEditProjectModal({
           setError("Failed to upload one or more files.");
         }
       } finally {
-        // 3. Decrement counter only when this specific batch is truly done
         setUploadCounter((prev) => Math.max(0, prev - 1));
       }
     });
@@ -733,14 +665,12 @@ export default function AddEditProjectModal({
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
     processFiles(files);
-    e.target.value = ""; // Reset input
+    e.target.value = "";
   };
 
-  // Drag & Drop + Paste Handlers
   const handleDragOverUpload = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    // FIX: Only trigger overlay if dragging external Files (ignores internal reordering)
     if (
       e.dataTransfer.types &&
       Array.from(e.dataTransfer.types).includes("Files")
@@ -752,7 +682,6 @@ export default function AddEditProjectModal({
   const handleDragLeaveUpload = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    // NEW: Check if we are actually leaving the drop zone (modal) vs entering a child element
     if (!e.currentTarget.contains(e.relatedTarget)) {
       setIsDragging(false);
     }
@@ -762,7 +691,6 @@ export default function AddEditProjectModal({
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    // Standard file drop check
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) processFiles(files);
   };
@@ -787,8 +715,6 @@ export default function AddEditProjectModal({
       const itemToRemove = prev.media[index];
       const newMedia = prev.media.filter((_, i) => i !== index);
       let newThumbnail = prev.thumbnail;
-
-      // If we removed the thumbnail, try to find the next valid image
       if (getPreviewUrl(itemToRemove) === prev.thumbnail) {
         const nextValidImage = newMedia.find((m) => m.type !== "video");
         newThumbnail = nextValidImage ? getPreviewUrl(nextValidImage) : "";
@@ -799,12 +725,10 @@ export default function AddEditProjectModal({
 
   const setAsThumbnail = (item, e) => {
     if (e) e.stopPropagation();
-    // Prevent videos from being set as thumbnail
     if (item.type === "video") return;
-
     const url = getPreviewUrl(item);
     setFormData((prev) => ({ ...prev, thumbnail: url }));
-    setError(""); // Clear error when a thumbnail is selected
+    setError("");
   };
 
   const handleTagKeyDown = (e) => {
@@ -841,8 +765,6 @@ export default function AddEditProjectModal({
       }
 
       const newDescription = selectedRepo.description || "";
-
-      // Update State
       setFormData((prev) => ({
         ...prev,
         title: cleanTitle,
@@ -850,8 +772,6 @@ export default function AddEditProjectModal({
         githubLink: selectedRepo.html_url,
         tags: repoTags,
       }));
-
-      // FIX: Manually update the Rich Text Editor visual content
       if (editorRef.current) {
         editorRef.current.innerHTML = newDescription;
       }
@@ -860,8 +780,6 @@ export default function AddEditProjectModal({
 
   const getPreviewUrl = (item) => {
     if (!item.url) return "";
-
-    // Handle PDFs
     if (
       item.originalFormat === "pdf" ||
       item.type === "pdf" ||
@@ -869,12 +787,9 @@ export default function AddEditProjectModal({
     ) {
       return item.url.replace(/\.pdf$/i, ".jpg");
     }
-
-    // Handle Videos: Replace extension with .jpg to get Cloudinary thumbnail
     if (item.type === "video" || item.url.match(/\.(mp4|mov|webm|mkv)$/i)) {
       return item.url.replace(/\.[^/.]+$/, ".jpg");
     }
-
     return item.url;
   };
 
@@ -882,8 +797,6 @@ export default function AddEditProjectModal({
     e.preventDefault();
     setError("");
     const { startDate, endDate, status } = formData;
-
-    // 1. Date & Status Validations
     if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
       setError("End date cannot be earlier than start date");
       return;
@@ -902,59 +815,49 @@ export default function AddEditProjectModal({
       setError("Ongoing or On Hold projects cannot have an end date");
       return;
     }
-
-    // 2. Description Validation (Strip HTML tags to check for real text)
     const plainTextDescription = formData.description
       ? formData.description.replace(/<[^>]+>/g, "").trim()
       : "";
-
     if (!plainTextDescription) {
       setError("Please add a description for your project.");
       return;
     }
-
-    // 3. Thumbnail Calculation & Validation
     let finalThumbnail = formData.thumbnail;
-
-    // If no manual thumbnail set, try to auto-select first NON-VIDEO media
     if (!finalThumbnail && formData.media && formData.media.length > 0) {
       const firstValidImage = formData.media.find((m) => m.type !== "video");
       if (firstValidImage) {
         finalThumbnail = getPreviewUrl(firstValidImage);
       }
     }
-
     if (!finalThumbnail) {
       setError("Please upload an image and set it as the project thumbnail.");
       return;
     }
-
     onSave({ ...formData, image: finalThumbnail });
   };
 
   const renderPreviewItem = (item) => {
-    // NEW: Handle JSON/Lottie files visual
-    // Checks for 'json' type (Cloudinary raw) or .json extension
     if (item.type === "json" || item.url?.endsWith(".json")) {
-      // Render the actual animation using the helper
       return <LottieRenderer url={item.url} className="w-full h-full p-1" />;
     }
-
     const previewUrl = getPreviewUrl(item);
 
-    // Render the generated thumbnail for both images and videos
+    // --- OPTIMIZATION APPLIED HERE ---
+    // Use the optimized URL for thumbnails in the grid
+    const optimizedPreview = getOptimizedUrl(previewUrl, 300);
+
     return (
       <>
         <img
-          src={previewUrl}
+          src={optimizedPreview}
           alt="preview"
           className="w-full h-full object-cover"
+          loading="lazy" // Native Lazy Loading
           onError={(e) => {
             e.target.onerror = null;
             e.target.src = "https://via.placeholder.com/150?text=No+Preview";
           }}
         />
-        {/* Overlay icon for videos */}
         {item.type === "video" && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
             <Film size={20} className="text-white/90 drop-shadow-md" />
@@ -1012,14 +915,12 @@ export default function AddEditProjectModal({
   };
   const [isEditingMedia, setIsEditingMedia] = useState(false);
   const [tempMedia, setTempMedia] = useState([]);
-  const [showMediaHelp, setShowMediaHelp] = useState(false); // NEW STATE
-  const [isClearing, setIsClearing] = useState(false); // NEW: Animation state
+  const [showMediaHelp, setShowMediaHelp] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
-  // NEW: Smoothly clear all media with transition
   const handleClearMedia = () => {
     if (formData.media.length === 0) return;
     setIsClearing(true);
-    // Wait for animation (500ms) to finish before removing data
     setTimeout(() => {
       setFormData((prev) => ({ ...prev, media: [], thumbnail: "" }));
       setIsClearing(false);
@@ -1050,18 +951,15 @@ export default function AddEditProjectModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      {/* ... [STYLES KEPT AS IS] ... */}
       <style>{`
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active{ -webkit-background-clip: text; -webkit-text-fill-color: #ffffff; transition: background-color 5000s ease-in-out 0s; box-shadow: inset 0 0 20px 20px 23232329; }
-        /* Updated selectors from [type="date"] to [type="month"] to style the month picker */
         input[type="month"] { color-scheme: dark; }
         input[type="month"]::-webkit-calendar-picker-indicator { filter: invert(0); cursor: pointer; opacity: 1; transition: all 0.2s; }
         input[type="month"]::-webkit-calendar-picker-indicator:hover { opacity: 1; filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(346deg) brightness(118%) contrast(119%); }
       `}</style>
 
-      {/* ... [PREVIEW MODAL KEPT AS IS] ... */}
       {previewItem && (
         <div
           className="fixed inset-0 z-[70] bg-black/95 flex items-center justify-center p-4"
@@ -1091,7 +989,6 @@ export default function AddEditProjectModal({
                 />
               ) : previewItem.type === "json" ||
                 previewItem.url?.endsWith(".json") ? (
-                // Lottie Full Screen Preview
                 <div className="w-[500px] h-[500px] max-w-[80vw] max-h-[80vh]">
                   <LottieRenderer
                     url={previewItem.url}
@@ -1100,7 +997,7 @@ export default function AddEditProjectModal({
                 </div>
               ) : (
                 <img
-                  src={getPreviewUrl(previewItem)}
+                  src={getOptimizedUrl(getPreviewUrl(previewItem), 1280)} // Optimized for Fullscreen Preview too
                   alt="Full Preview"
                   className="max-w-full max-h-[85vh] object-contain"
                 />
@@ -1123,17 +1020,15 @@ export default function AddEditProjectModal({
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose}
       />
-      {/* Handlers moved to this main container */}
       <div
-        ref={modalRef} // Added Ref
-        tabIndex={-1} // Added tabIndex to make div focusable
+        ref={modalRef}
+        tabIndex={-1}
         onDragOver={handleDragOverUpload}
         onDragLeave={handleDragLeaveUpload}
         onDrop={handleDropUpload}
         onPaste={handlePasteUpload}
         className="relative w-full max-w-4xl bg-[#0B1120] border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-4 outline-none"
       >
-        {/* NEW: Full Overlay when dragging */}
         {isDragging && (
           <div className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-sm rounded-2xl border-2 border-dashed border-orange-500 flex flex-col items-center justify-center pointer-events-none animate-in fade-in duration-200">
             <UploadCloud size={64} className="text-orange-500 mb-4" />
@@ -1142,7 +1037,6 @@ export default function AddEditProjectModal({
           </div>
         )}
 
-        {/* ... [HEADER KEPT AS IS] ... */}
         <div className="flex items-center justify-between p-6 border-b border-white/5">
           <div className="flex items-center gap-4 flex-wrap">
             <h2 className="text-xl font-bold text-white">
@@ -1156,7 +1050,6 @@ export default function AddEditProjectModal({
                 </span>
               </div>
             )}
-            {/* Video Banner Warning */}
             {formData.media.length > 0 &&
               formData.media.every((m) => m.type === "video") && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg animate-in fade-in slide-in-from-left-2">
@@ -1168,7 +1061,7 @@ export default function AddEditProjectModal({
               )}
           </div>
           <button
-            onClick={handleSafeClose} // Updated to safe close
+            onClick={handleSafeClose}
             className="text-gray-500 hover:text-white transition-colors"
           >
             <X size={24} />
@@ -1177,7 +1070,6 @@ export default function AddEditProjectModal({
 
         <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
           <form id="project-form" onSubmit={handleSubmit} className="space-y-8">
-            {/* ... [MEDIA UPLOAD SECTION KEPT AS IS] ... */}
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <label className="text-sm font-medium text-gray-400 flex items-center gap-2">
@@ -1208,7 +1100,6 @@ export default function AddEditProjectModal({
                 )}
               </div>
               {isEditingMedia ? (
-                /* ... Edit Mode List ... */
                 <div className="bg-black/20 border border-white/5 rounded-xl p-3 space-y-2 animate-in fade-in slide-in-from-right-4 duration-300">
                   <div className="max-h-[300px] overflow-y-auto scrollbar-hide space-y-2">
                     {tempMedia.map((item, idx) => (
@@ -1233,7 +1124,7 @@ export default function AddEditProjectModal({
                         </div>
                         <div className="w-12 h-12 flex-shrink-0 rounded overflow-hidden border border-white/10 bg-black relative">
                           <img
-                            src={getPreviewUrl(item)}
+                            src={getOptimizedUrl(getPreviewUrl(item), 100)} // Small thumb for list
                             alt=""
                             className="w-full h-full object-cover"
                           />
@@ -1275,7 +1166,6 @@ export default function AddEditProjectModal({
                   </div>
                 </div>
               ) : (
-                /* ... Normal Grid View ... */
                 <>
                   <div
                     className={`flex flex-wrap gap-3 mb-3 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${
@@ -1312,7 +1202,6 @@ export default function AddEditProjectModal({
                           {renderPreviewItem(item)}
                           <div className="absolute inset-0 group-hover:bg-black/10 transition-colors">
                             <div className="absolute top-1 right-1 flex gap-1 bg-black/80 rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
-                              {/* Only show Star button if NOT a video */}
                               {item.type !== "video" && (
                                 <button
                                   type="button"
@@ -1352,10 +1241,7 @@ export default function AddEditProjectModal({
                         </div>
                       );
                     })}
-                    <label
-                      // Handlers removed from here as they are now on the parent
-                      className="w-20 h-20 border-2 border-dashed border-white/10 hover:bg-white/5 hover:border-orange-500/50 rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-300 group"
-                    >
+                    <label className="w-20 h-20 border-2 border-dashed border-white/10 hover:bg-white/5 hover:border-orange-500/50 rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-300 group">
                       {uploading ? (
                         <Loader2
                           className="animate-spin text-orange-500"
@@ -1381,12 +1267,10 @@ export default function AddEditProjectModal({
                     </label>
                   </div>
 
-                  {/* NEW: Interactive Help Text */}
                   <div className="relative">
                     <button
                       type="button"
                       onClick={() => setShowMediaHelp(!showMediaHelp)}
-                      // UPDATED: Switched to Amber, increased border opacity and font weight for visibility
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/50 rounded-full text-xs font-bold text-amber-500 hover:bg-amber-500/20 transition-all"
                     >
                       <Info size={14} />
@@ -1394,10 +1278,8 @@ export default function AddEditProjectModal({
                     </button>
 
                     {showMediaHelp && (
-                      // UPDATED: Wider container, more padding
                       <div className="absolute top-full left-0 mt-2 z-20 w-72 p-4 bg-[#0F1623] border border-white/10 rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-200 ring-1 ring-white/5">
                         <ul className="space-y-3 text-xs text-gray-300">
-                          {/* NEW: Upload Method Info */}
                           <li className="flex gap-2.5 items-start">
                             <UploadCloud
                               size={14}
@@ -1408,7 +1290,6 @@ export default function AddEditProjectModal({
                               or <b>Copy Paste</b>.
                             </span>
                           </li>
-                          {/* UPDATED: Hover instruction added */}
                           <li className="flex gap-2.5 items-start">
                             <Star
                               size={14}
@@ -1425,7 +1306,6 @@ export default function AddEditProjectModal({
                             />
                             <span>Drag and drop to re-arrange.</span>
                           </li>
-                          {/* NEW: Instruction for Edit Details */}
                           <li className="flex gap-2.5 items-start">
                             <Edit
                               size={14}
@@ -1450,7 +1330,8 @@ export default function AddEditProjectModal({
               )}
             </div>
 
-            {/* ... [GITHUB & BASIC INFO SECTIONS KEPT AS IS] ... */}
+            {/* ... Rest of the form remains identical to your code ... */}
+            {/* I've included the rest below to ensure the file is complete */}
             <div className="bg-blue-900/10 border border-blue-500/20 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2 text-blue-400">
                 <Github size={16} />
@@ -1500,7 +1381,6 @@ export default function AddEditProjectModal({
                     <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-0.5">
                       Start Date
                     </span>
-                    {/* Changed type="date" to type="month" */}
                     <input
                       type="month"
                       name="startDate"
@@ -1521,7 +1401,6 @@ export default function AddEditProjectModal({
                     <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-0.5">
                       End Date
                     </span>
-                    {/* Changed type="date" to type="month" */}
                     <input
                       type="month"
                       name="endDate"
@@ -1538,18 +1417,20 @@ export default function AddEditProjectModal({
               </div>
             </div>
 
-            {/* 4. Description (Rich Text Editor) - UPDATED CSS AND LOGIC */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-400">
                 Description
               </label>
               <div className="w-full bg-black/30 border border-white/10 rounded-xl overflow-hidden focus-within:border-orange-500/50 transition-colors relative">
-                {/* Toolbar */}
                 <div className="flex items-center gap-1 p-2 border-b border-white/10 bg-white/5 flex-wrap">
                   {[
                     { cmd: "bold", icon: Bold, title: "Bold" },
                     { cmd: "italic", icon: Italic, title: "Italic" },
-                    { cmd: "underline", icon: Underline, title: "Underline" },
+                    {
+                      cmd: "underline",
+                      icon: Underline,
+                      title: "Underline",
+                    },
                     {
                       cmd: "strikeThrough",
                       icon: Strikethrough,
@@ -1572,8 +1453,6 @@ export default function AddEditProjectModal({
                     </button>
                   ))}
                   <div className="w-px h-4 bg-white/20 mx-1" />
-
-                  {/* List Controls */}
                   <div className="relative">
                     <button
                       type="button"
@@ -1687,7 +1566,6 @@ export default function AddEditProjectModal({
                   </button>
                 </div>
 
-                {/* Editor Content Area - UPDATED CLASSNAME */}
                 <div
                   ref={editorRef}
                   contentEditable
@@ -1695,19 +1573,16 @@ export default function AddEditProjectModal({
                   onKeyDown={handleEditorKeyDown}
                   onInput={(e) => {
                     const html = e.currentTarget.innerHTML;
-                    updateListNumbering(); // Run logic on every input
+                    updateListNumbering();
                     setFormData((prev) => ({ ...prev, description: html }));
-                    setError(""); // Clear error when typing description
+                    setError("");
                   }}
                   onKeyUp={checkFormats}
                   onMouseUp={checkFormats}
-                  // FIX: Removed all custom CSS counters.
-                  // Now relies on JS `updateListNumbering` to inject `start` attributes, and browser default styles.
                   className="w-full h-64 p-4 text-white overflow-y-auto focus:outline-none scrollbar-hide [&_ul]:list-disc [&_ul]:pl-8 [&_ol]:list-decimal [&_ol]:pl-8"
                   style={{ minHeight: "150px" }}
                 />
 
-                {/* Link Modal Popup */}
                 {showLinkModal && (
                   <div className="absolute top-10 left-2 z-20 bg-[#0B1120] border border-white/20 rounded-lg shadow-xl p-3 w-72 animate-in fade-in zoom-in duration-200">
                     <div className="space-y-3">
@@ -1769,7 +1644,6 @@ export default function AddEditProjectModal({
               </div>
             </div>
 
-            {/* ... [STATUS & TAGS SECTIONS KEPT AS IS] ... */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2 relative">
                 <div className="h-9 flex items-center">
@@ -1856,7 +1730,6 @@ export default function AddEditProjectModal({
               </div>
             </div>
 
-            {/* ... [LINKS SECTION KEPT AS IS] ... */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-400">
@@ -1884,13 +1757,11 @@ export default function AddEditProjectModal({
               </div>
             </div>
 
-            {/* --- NEW: COLLABORATORS SECTION --- */}
             <div className="space-y-4 pt-4 border-t border-white/10">
               <label className="text-sm font-medium text-gray-400 flex items-center gap-2">
                 <Users size={16} /> Collaborators
               </label>
 
-              {/* Search Input & Dropdown */}
               <div className="relative z-20">
                 <input
                   type="text"
@@ -1899,8 +1770,6 @@ export default function AddEditProjectModal({
                   placeholder="Search by name or email..."
                   className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-orange-500/50 focus:outline-none placeholder:text-gray-600"
                 />
-
-                {/* Search Loading Indicator */}
                 {isSearchingCollabs && (
                   <div className="absolute right-4 top-1/2 -translate-y-1/2">
                     <Loader2
@@ -1909,8 +1778,6 @@ export default function AddEditProjectModal({
                     />
                   </div>
                 )}
-
-                {/* Dropdown Results */}
                 {collabResults.length > 0 && (
                   <div className="absolute top-full left-0 right-0 mt-2 bg-[#0F1623] border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-y-auto scrollbar-hide animate-in fade-in zoom-in-95 duration-200">
                     {collabResults.map((user) => (
@@ -1945,7 +1812,6 @@ export default function AddEditProjectModal({
                 )}
               </div>
 
-              {/* Selected Collaborators List (Character Cards) */}
               {formData.collaborators && formData.collaborators.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                   {formData.collaborators.map((collab) => (
@@ -1987,13 +1853,11 @@ export default function AddEditProjectModal({
 
         <div className="p-6 border-t border-white/5 flex justify-end gap-3 bg-black/20 rounded-b-2xl backdrop-blur-md">
           <button
-            onClick={handleSafeClose} // Updated to safe close
+            onClick={handleSafeClose}
             className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
           >
             Cancel
           </button>
-
-          {/* NEW: Stop Upload Button */}
           {uploading && (
             <button
               type="button"
@@ -2003,7 +1867,6 @@ export default function AddEditProjectModal({
               <X size={16} /> Stop Upload
             </button>
           )}
-
           <button
             type="submit"
             form="project-form"
