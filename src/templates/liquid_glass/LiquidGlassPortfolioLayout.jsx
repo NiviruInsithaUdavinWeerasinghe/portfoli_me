@@ -10,6 +10,7 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { db } from "../../lib/firebase";
+import logo from "../../assets/logo192.png"; // Import the logo
 import {
   Outlet,
   useParams,
@@ -37,12 +38,19 @@ import {
   Minimize,
   ChevronLeft,
   ChevronRight,
-  Globe, // NEW
-  Lock, // NEW
-  Save, // NEW
-  AlertCircle, // NEW
-  Info, // NEW: For Tips
+  Globe,
+  Lock,
+  Save,
+  AlertCircle,
+  Info,
+  Palette,
+  Camera,
+  Loader2,
+  RotateCcw, // NEW: For the revert button
 } from "lucide-react";
+
+// NEW: Import Cloudinary Service
+import { uploadFileToCloudinary } from "../../services/cloudinaryService";
 
 const LiquidGlassPortfolioLayout = () => {
   const { username: routeParam } = useParams(); // UPDATED: Renamed to routeParam (could be 'Niviru' or 'uid')
@@ -97,15 +105,46 @@ const LiquidGlassPortfolioLayout = () => {
   });
 
   // NEW: Customization States
-  const [isLoadingSettings, setIsLoadingSettings] = useState(true); // NEW: Prevents flash of default header
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [portfolioName, setPortfolioName] = useState("PortfoliMe");
 
-  // FIX: Initialize from localStorage to prevents "Flash of Default Content"
+  // NEW: Header Image State
+  const [headerImage, setHeaderImage] = useState(logo);
+  const [isUploadingHeader, setIsUploadingHeader] = useState(false);
+  const [headerError, setHeaderError] = useState(null);
+
+  // NEW: Dynamic Logo Glow Color
+  const [logoGlow, setLogoGlow] = useState("rgba(249, 115, 22, 0.2)"); // Default Orange
+
+  // Helper to extract color from loaded image
+  const extractImageColor = (imgElement) => {
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(imgElement, 0, 0, 1, 1);
+      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+      setLogoGlow(`rgba(${r}, ${g}, ${b}, 0.3)`);
+    } catch (e) {
+      console.warn("Could not extract image color (CORS likely):", e);
+    }
+  };
+
+  // COLOR PICKER STATE
+  const [highlightColor, setHighlightColor] = useState("text-orange-500");
+  const [highlightIndex, setHighlightIndex] = useState(8);
+
+  // NEW: Dropdown Toggle State for Name Editor (Desktop)
+  const [isNameEditorOpen, setIsNameEditorOpen] = useState(false);
+  // NEW: Accordion Toggle State for Name Editor (Mobile)
+  const [isMobileNameEditorOpen, setIsMobileNameEditorOpen] = useState(false);
+
   const [headerLayout, setHeaderLayout] = useState(() => {
     return localStorage.getItem("headerLayout") || "standard";
   });
 
-  const [isPublic, setIsPublic] = useState(true); // NEW: Visibility State
+  const [isPublic, setIsPublic] = useState(true);
   const [isLayoutMenuOpen, setIsLayoutMenuOpen] = useState(false);
 
   // UPDATED: Initialize Sidebar state from localStorage
@@ -113,6 +152,24 @@ const LiquidGlassPortfolioLayout = () => {
     const saved = localStorage.getItem("sidebarCollapsed");
     return saved === "true";
   });
+
+  // NEW: State to track if header space is too tight
+  const [isHeaderTight, setIsHeaderTight] = useState(false);
+
+  // NEW: specific logic to measure space left and toggle profile icon
+  useEffect(() => {
+    const handleResize = () => {
+      // Consider size left: If width < 500px, space is too small for logo + actions + profile
+      // This automatically adjusts based on viewport, not a manual CSS class
+      setIsHeaderTight(window.innerWidth < 500);
+    };
+
+    // Run on mount
+    handleResize();
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // UPDATED: Save to localStorage whenever isEditMode changes
   useEffect(() => {
@@ -134,53 +191,94 @@ const LiquidGlassPortfolioLayout = () => {
   // NEW: Track Original Settings for Comparison
   const [originalSettings, setOriginalSettings] = useState({
     portfolioName: "PortfoliMe",
+    headerImage: logo, // Track image
     headerLayout: "standard",
     isPublic: true,
+    highlightColor: "text-orange-500",
+    highlightIndex: 8,
   });
 
-  // NEW: Save Animation State & Status
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(true); // true = Success, false = Error (No changes)
+  const [saveSuccess, setSaveSuccess] = useState(true);
+
+  // --- NEW: Handle Header Image Upload (Direct Upload) ---
+  const handleHeaderImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Reset error
+    setHeaderError(null);
+
+    // 1. Strict Validation: Static Images Only (No GIF)
+    const validTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      setHeaderError("Static images only (PNG, JPG, WEBP)");
+      // Clear error automatically after 3 seconds
+      setTimeout(() => setHeaderError(null), 3000);
+      return;
+    }
+
+    setIsUploadingHeader(true);
+    try {
+      // 2. Upload to Cloudinary (Directly)
+      const uploadedData = await uploadFileToCloudinary(file);
+
+      // 3. Update State
+      setHeaderImage(uploadedData.url);
+      console.log("Header image updated:", uploadedData.url);
+    } catch (error) {
+      console.error("Failed to upload header image", error);
+      setHeaderError("Upload failed");
+      setTimeout(() => setHeaderError(null), 3000);
+    } finally {
+      setIsUploadingHeader(false);
+    }
+  };
 
   // CONSOLIDATED FIX: Single Effect to Fetch, Update State, Set Baseline, and Stop Loading
   useEffect(() => {
     const fetchSettings = async () => {
-      // UPDATED: Wait for resolvedUid
-      if (!resolvedUid) {
-        return;
-      }
+      if (!resolvedUid) return;
+
       try {
-        // UPDATED: Use resolvedUid instead of username/routeParam
         const userDocRef = doc(db, "users", resolvedUid);
         const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
           const data = userDocSnap.data();
 
-          // Prepare new settings object
+          // Prepare new settings object with defaults
           const fetchedSettings = {
             portfolioName: data.portfolioName || "PortfoliMe",
+            headerImage: data.headerImage || logo, // Fetch Custom Image
             headerLayout: data.headerLayout || "standard",
             isPublic: data.isPublic !== undefined ? data.isPublic : true,
+            highlightColor: data.highlightColor || "text-orange-500",
+            highlightIndex:
+              data.highlightIndex !== undefined
+                ? data.highlightIndex
+                : data.portfolioName?.length - 2 || 8,
           };
 
-          // Update UI States immediately
+          // Update UI States
           setPortfolioName(fetchedSettings.portfolioName);
+          setHeaderImage(fetchedSettings.headerImage);
           setHeaderLayout(fetchedSettings.headerLayout);
           setIsPublic(fetchedSettings.isPublic);
+          setHighlightColor(fetchedSettings.highlightColor);
+          setHighlightIndex(fetchedSettings.highlightIndex);
 
-          // Set Baseline for comparison
+          // Set Baseline
           setOriginalSettings(fetchedSettings);
         }
       } catch (error) {
         console.error("Error fetching settings:", error);
       } finally {
-        // Ensure this runs only AFTER states are queued to update
         setIsLoadingSettings(false);
       }
     };
     fetchSettings();
-  }, [resolvedUid]); // UPDATED: Changed to resolvedUid
+  }, [resolvedUid]);
 
   // NEW: Conditional Save Logic
   const handleGlobalSave = async () => {
@@ -189,39 +287,49 @@ const LiquidGlassPortfolioLayout = () => {
     // 1. Check for changes
     const hasChanges =
       portfolioName !== originalSettings.portfolioName ||
+      headerImage !== originalSettings.headerImage || // Check image change
       headerLayout !== originalSettings.headerLayout ||
-      isPublic !== originalSettings.isPublic;
+      isPublic !== originalSettings.isPublic ||
+      highlightColor !== originalSettings.highlightColor ||
+      highlightIndex !== originalSettings.highlightIndex;
 
-    // 2. Handle "No Changes" Scenario (Error Animation)
+    // 2. Handle "No Changes" Scenario
     if (!hasChanges) {
-      setSaveSuccess(false); // Trigger Error Icon
+      setSaveSuccess(false);
       setIsSaving(true);
       setTimeout(() => setIsSaving(false), 2000);
       return;
     }
 
-    // 3. Handle Valid Save (Success Animation)
+    // 3. Handle Valid Save
     try {
       const userRef = doc(db, "users", currentUser.uid);
       await updateDoc(userRef, {
         portfolioName,
+        headerImage, // Save image URL
         headerLayout,
         isPublic,
+        highlightColor,
+        highlightIndex,
       });
       console.log("Global settings saved successfully");
 
-      // Update baseline to new current state
-      setOriginalSettings({ portfolioName, headerLayout, isPublic });
+      // Update baseline
+      setOriginalSettings({
+        portfolioName,
+        headerImage,
+        headerLayout,
+        isPublic,
+        highlightColor,
+        highlightIndex,
+      });
 
-      setSaveSuccess(true); // Trigger Success Icon
+      setSaveSuccess(true);
       setIsSaving(true);
-
-      setTimeout(() => {
-        setIsSaving(false);
-      }, 2000);
+      setTimeout(() => setIsSaving(false), 2000);
     } catch (error) {
       console.error("Error saving settings:", error);
-      setSaveSuccess(false); // Trigger Error Icon on API fail
+      setSaveSuccess(false);
       setIsSaving(true);
       setTimeout(() => setIsSaving(false), 2000);
     }
@@ -438,35 +546,249 @@ const LiquidGlassPortfolioLayout = () => {
                 </button>
               )}
 
-              <div
-                className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center text-white font-bold text-sm md:text-lg shadow-lg shadow-orange-500/30 cursor-pointer hover:scale-110 transition-transform flex-shrink-0"
-                onClick={() => navigate("/")}
-              >
-                {portfolioName.charAt(0).toUpperCase()}
+              {/* Editable Header Image / Logo */}
+              {/* FIXED: Added flex-shrink-0 to wrapper so it doesn't vanish on small screens */}
+              <div className="relative group/logo flex-shrink-0">
+                <img
+                  src={headerImage}
+                  alt="Logo"
+                  crossOrigin="anonymous" // Required for Canvas color extraction
+                  onLoad={(e) => extractImageColor(e.target)} // Extract color when loaded
+                  style={{
+                    boxShadow: `0 0 20px ${logoGlow}`, // Apply dynamic extracted color
+                  }}
+                  className={`w-8 h-8 md:w-10 md:h-10 rounded-xl cursor-pointer hover:scale-110 transition-transform flex-shrink-0 object-contain bg-[#0B1120] ${
+                    isUploadingHeader ? "opacity-50" : "opacity-100"
+                  }`}
+                  onClick={() => navigate("/")}
+                />
+
+                {/* Upload Spinner */}
+                {isUploadingHeader && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Loader2
+                      size={16}
+                      className="text-orange-500 animate-spin"
+                    />
+                  </div>
+                )}
+
+                {/* Edit Controls (Only in Edit Mode) */}
+                {isOwner && isEditMode && !isUploadingHeader && (
+                  <>
+                    {/* Camera Overlay */}
+                    <label className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-xl opacity-0 group-hover/logo:opacity-100 transition-opacity cursor-pointer z-10">
+                      <Camera size={14} className="text-white" />
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/png, image/jpeg, image/webp" // NO GIF
+                        onChange={handleHeaderImageUpload}
+                      />
+                    </label>
+
+                    {/* Revert Button */}
+                    {headerImage !== logo && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHeaderImage(logo);
+                        }}
+                        className="absolute -top-2 -right-2 bg-red-500/90 hover:bg-red-600 text-white rounded-full p-1 shadow-md opacity-0 group-hover/logo:opacity-100 transition-opacity z-20"
+                        title="Revert to default logo"
+                      >
+                        <RotateCcw size={10} />
+                      </button>
+                    )}
+                  </>
+                )}
+
+                {/* Error Message Bubble - Subtle & Beautiful */}
+                {headerError && (
+                  <div className="absolute top-full left-0 mt-3 z-50 w-max animate-in fade-in slide-in-from-top-1">
+                    <div className="bg-[#0B1120]/90 border border-red-500/30 text-red-400 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg shadow-xl backdrop-blur-md flex items-center gap-2">
+                      <AlertCircle size={10} />
+                      {headerError}
+                    </div>
+                    {/* Little Arrow pointing up */}
+                    <div className="absolute -top-1 left-3 w-2 h-2 bg-[#0B1120] border-t border-l border-red-500/30 transform rotate-45" />
+                  </div>
+                )}
               </div>
 
-              {/* Editable Title */}
+              {/* Logo Text Area with Dropdown Editor */}
               <div
-                className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                className={`relative flex flex-col justify-center transition-all duration-300 ease-in-out ${
                   headerLayout === "left" && isSidebarCollapsed
-                    ? "xl:max-h-0 xl:opacity-0"
-                    : "max-h-12 opacity-100"
+                    ? "xl:max-h-0 xl:opacity-0 xl:overflow-hidden"
+                    : "opacity-100"
                 }`}
               >
-                {isOwner && isEditMode ? (
-                  <input
-                    type="text"
-                    value={portfolioName}
-                    onChange={(e) => setPortfolioName(e.target.value)}
-                    className="bg-transparent border-b border-orange-500/50 text-base md:text-lg font-bold tracking-tight text-white focus:outline-none focus:border-orange-500 w-24 md:w-32 text-center"
-                  />
-                ) : (
-                  <span className="text-base md:text-lg font-bold tracking-tight block whitespace-nowrap">
-                    {portfolioName.substring(0, portfolioName.length - 2)}
-                    <span className="text-orange-500">
-                      {portfolioName.substring(portfolioName.length - 2)}
-                    </span>
+                {/* 1. Trigger Button (Above Name) */}
+                {isOwner && isEditMode && (
+                  <button
+                    onClick={() => {
+                      setIsNameEditorOpen(!isNameEditorOpen);
+                      // Close other dropdowns
+                      setIsNotifDropdownOpen(false);
+                      setIsProfileDropdownOpen(false);
+                      setIsLayoutMenuOpen(false);
+                    }}
+                    // UPDATED: Added 'hidden md:flex' so it vanishes on mobile
+                    className={`hidden md:flex items-center gap-1.5 mb-1 px-2 py-0.5 rounded-md self-start text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                      isNameEditorOpen
+                        ? "bg-orange-500 text-white"
+                        : "bg-white/10 text-gray-400 hover:bg-white/20 hover:text-white"
+                    }`}
+                  >
+                    <Palette size={10} />
+                    <span>Customize</span>
+                  </button>
+                )}
+
+                {/* 2. Display Name (Always Visible) */}
+                <span className="text-base md:text-lg font-bold tracking-tight block whitespace-nowrap cursor-default">
+                  {/* Render White Part */}
+                  {portfolioName.substring(0, highlightIndex)}
+                  {/* Render Colored Part */}
+                  <span className={highlightColor}>
+                    {portfolioName.substring(highlightIndex)}
                   </span>
+                </span>
+
+                {/* 3. The Dropdown Editor Tools */}
+                {isOwner && isEditMode && isNameEditorOpen && (
+                  <div
+                    className={`absolute z-[80] p-4 bg-[#0B1120] border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] w-64 animate-in fade-in zoom-in-95 duration-200 ring-1 ring-white/5
+                    ${
+                      headerLayout === "left"
+                        ? "left-full top-0 ml-4" // Sidebar: Pop to right
+                        : headerLayout === "bottom"
+                        ? "bottom-full left-0 mb-4" // Dock: Pop upwards
+                        : "top-full left-0 mt-4" // Standard: Pop downwards
+                    }`}
+                  >
+                    {/* Header of Dropdown */}
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                        Name & Style
+                      </span>
+                      <X
+                        size={14}
+                        className="cursor-pointer text-gray-500 hover:text-white"
+                        onClick={() => setIsNameEditorOpen(false)}
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      {/* Input Field */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-[10px] text-gray-500 font-bold">
+                            TEXT
+                          </label>
+                          <span
+                            className={`text-[10px] ${
+                              portfolioName.length === 15
+                                ? "text-orange-500"
+                                : "text-gray-600"
+                            }`}
+                          >
+                            {portfolioName.length}/15
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          maxLength={15} // Enforce limit
+                          value={portfolioName}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setPortfolioName(val);
+                            // Auto-adjust index if length shrinks below it
+                            if (val.length < highlightIndex) {
+                              setHighlightIndex(val.length);
+                            }
+                          }}
+                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 focus:bg-white/10 transition-colors"
+                          placeholder="Portfolio Name"
+                        />
+                      </div>
+
+                      {/* Color Palette */}
+                      <div>
+                        <label className="text-[10px] text-gray-500 font-bold mb-2 block">
+                          HIGHLIGHT COLOR
+                        </label>
+                        <div className="flex justify-between bg-white/5 p-2 rounded-lg border border-white/5">
+                          {[
+                            {
+                              id: "orange",
+                              class: "text-orange-500",
+                              bg: "bg-orange-500",
+                            },
+                            {
+                              id: "amber",
+                              class: "text-amber-500", // Reverted to Amber
+                              bg: "bg-amber-500",
+                            },
+                            {
+                              id: "green",
+                              class: "text-emerald-400", // New: Vibrant Green
+                              bg: "bg-emerald-400",
+                            },
+                            {
+                              id: "cyan",
+                              class: "text-cyan-400", // New: Electric Blue/Cyan
+                              bg: "bg-cyan-400",
+                            },
+                            {
+                              id: "blue",
+                              class: "text-blue-500",
+                              bg: "bg-blue-500",
+                            },
+                          ].map((c) => (
+                            <button
+                              key={c.id}
+                              onClick={() => setHighlightColor(c.class)}
+                              className={`w-6 h-6 rounded-full transition-all duration-200 ${
+                                c.bg
+                              } ${
+                                highlightColor === c.class
+                                  ? "ring-2 ring-white ring-offset-2 ring-offset-[#0B1120] scale-110 shadow-lg shadow-white/10"
+                                  : "opacity-60 hover:opacity-100 hover:scale-110"
+                              }`}
+                              title={c.id}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Split Slider */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-[10px] text-gray-500 font-bold">
+                            SPLIT POSITION
+                          </label>
+                          <span className="text-[10px] text-orange-500 font-mono">
+                            {highlightIndex}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max={portfolioName.length}
+                          value={highlightIndex}
+                          onChange={(e) =>
+                            setHighlightIndex(Number(e.target.value))
+                          }
+                          className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400"
+                        />
+                        <p className="text-[10px] text-gray-600 mt-1">
+                          Adjust where the highlight color begins.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -520,8 +842,8 @@ const LiquidGlassPortfolioLayout = () => {
             >
               {/* Mobile Menu Toggle (Visible on Mobile for ALL layouts) */}
               <div className="xl:hidden flex items-center gap-3 relative">
-                {/* Mobile Profile Picture Button - HIDE IF NOT LOGGED IN */}
-                {currentUser && (
+                {/* Mobile Profile Picture Button - HIDE IF NOT LOGGED IN OR IF SPACE IS TIGHT */}
+                {currentUser && !isHeaderTight && (
                   <button
                     onClick={() => {
                       setIsProfileDropdownOpen(!isProfileDropdownOpen);
@@ -1305,18 +1627,19 @@ const LiquidGlassPortfolioLayout = () => {
             onClick={() => setIsMobileMenuOpen(false)}
           />
           <div
-            className={`absolute bg-[#0B1120] border border-white/10 rounded-2xl p-4 shadow-2xl duration-300 max-h-[65vh] overflow-y-auto
+            /* UPDATED: flex flex-col and overflow-hidden ensures fixed header/footer behavior */
+            className={`absolute bg-[#0B1120] border border-white/10 rounded-2xl p-3 shadow-2xl duration-300 max-h-[80vh] flex flex-col overflow-hidden
               ${
                 headerLayout === "bottom"
-                  ? /* Dock Layout: Added md:w-full to force expansion */
-                    "bottom-24 left-4 right-4 max-w-md mx-auto animate-in slide-in-from-bottom-4 origin-bottom md:bottom-28 md:right-8 md:left-auto md:mx-0 md:max-w-lg md:w-full md:origin-bottom-right"
-                  : /* Standard/Top Layouts: Added md:w-full to force expansion */
-                    "top-4 left-4 right-4 max-w-md mx-auto md:left-auto md:right-4 md:mx-0 md:max-w-lg md:w-full animate-in slide-in-from-top-4 origin-top md:origin-top-right"
+                  ? /* Dock Layout */
+                    "bottom-24 right-4 w-72 animate-in slide-in-from-bottom-4 origin-bottom-right md:bottom-28 md:right-8"
+                  : /* Standard/Top Layouts */
+                    "top-20 right-4 w-72 animate-in slide-in-from-top-4 origin-top-right md:right-8"
               }
             `}
           >
-            {/* --- UPDATED HEADER ROW: Menu Text & Close Button --- */}
-            <div className="flex justify-between items-center mb-4">
+            {/* 1. FIXED HEADER ROW: Menu Text & Close Button */}
+            <div className="flex justify-between items-center mb-4 shrink-0">
               <span className="text-base font-bold text-gray-500 uppercase tracking-wider">
                 Menu
               </span>
@@ -1328,252 +1651,411 @@ const LiquidGlassPortfolioLayout = () => {
               </button>
             </div>
 
-            {/* --- USER DETAILS CARD (Moved below header) --- */}
-            <div className="bg-white/5 rounded-xl p-4 border border-white/5 flex items-center justify-between gap-3 mb-6">
-              <div className="overflow-hidden flex-1">
-                <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1">
-                  Signed in as
-                </p>
-                <p
-                  className="text-sm font-bold text-white truncate"
-                  title={currentUser?.email}
-                >
+            {/* 2. SCROLLABLE CONTENT AREA (User Details + Links + Settings) */}
+            {/* Added -mr-2 pr-2 to handle scrollbar visuals nicely while keeping padding */}
+            <div className="flex-1 overflow-y-auto min-h-0 -mr-2 pr-2 custom-scrollbar">
+              {/* User Details Card */}
+              <div className="bg-white/5 rounded-xl p-4 border border-white/5 flex items-center justify-between gap-3 mb-4">
+                <div className="overflow-hidden flex-1">
+                  <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1">
+                    Signed in as
+                  </p>
+                  <p
+                    className="text-sm font-bold text-white truncate"
+                    title={currentUser?.email}
+                  >
+                    {currentUser?.providerData?.some(
+                      (p) => p.providerId === "twitter.com"
+                    )
+                      ? currentUser?.displayName
+                      : currentUser?.email}
+                  </p>
+                </div>
+                {/* Service Icon - Shows Auth Type */}
+                <div className="shrink-0 p-2 bg-white/5 rounded-lg border border-white/5 text-gray-300 flex items-center justify-center">
                   {currentUser?.providerData?.some(
-                    (p) => p.providerId === "twitter.com"
-                  )
-                    ? currentUser?.displayName
-                    : currentUser?.email}
-                </p>
-              </div>
-              {/* Service Icon - Shows Auth Type */}
-              <div className="shrink-0 p-2 bg-white/5 rounded-lg border border-white/5 text-gray-300 flex items-center justify-center">
-                {currentUser?.providerData?.some(
-                  (p) => p.providerId === "google.com"
-                ) ? (
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      fill="#4285F4"
-                    />
-                    <path
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      fill="#34A853"
-                    />
-                    <path
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                      fill="#FBBC05"
-                    />
-                    <path
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                      fill="#EA4335"
-                    />
-                  </svg>
-                ) : currentUser?.providerData?.some(
-                    (p) => p.providerId === "github.com"
+                    (p) => p.providerId === "google.com"
                   ) ? (
-                  <Github size={18} />
-                ) : currentUser?.providerData?.some(
-                    (p) => p.providerId === "twitter.com"
-                  ) ? (
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                  </svg>
-                ) : (
-                  <Mail size={18} />
-                )}
-              </div>
-            </div>
-            <nav className="flex flex-col gap-2">
-              <MobileNavItem
-                to={`/${routeParam}/overview`} // UPDATED
-                icon={<User size={18} />}
-                label="Overview"
-                onClick={() => setIsMobileMenuOpen(false)}
-              />
-              <MobileNavItem
-                to={`/${routeParam}/projects`} // UPDATED
-                icon={<Briefcase size={18} />}
-                label="Projects"
-                onClick={() => setIsMobileMenuOpen(false)}
-              />
-
-              {/* FIXED: Only show Settings & Edit Mode in Mobile Menu if Owner */}
-              {isOwner && (
-                <>
-                  <MobileNavItem
-                    to={`/${routeParam}/settings`} // UPDATED
-                    icon={<Settings size={18} />}
-                    label="Settings"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  />
-
-                  {/* --- MOBILE EDIT MODE TOGGLE --- */}
-                  <div
-                    onClick={() => setIsEditMode(!isEditMode)}
-                    className="flex items-center justify-between px-4 py-3 mt-2 rounded-xl bg-white/5 border border-white/5 cursor-pointer active:scale-95 transition-all"
-                  >
-                    <div className="flex items-baseline gap-3">
-                      <span className="text-gray-400">Mode</span>
-                      <span
-                        className={`text-xs font-black tracking-[0.15em] uppercase ${
-                          isEditMode ? "text-orange-500" : "text-gray-500"
-                        }`}
-                      >
-                        {isEditMode ? "EDITING" : "VIEWING"}
-                      </span>
-                    </div>
-
-                    {/* Switch UI */}
-                    <div
-                      className={`relative w-11 h-6 rounded-full transition-colors duration-500 ease-out border border-white/5 ${
-                        isEditMode
-                          ? "bg-orange-500/20 ring-1 ring-orange-500/50"
-                          : "bg-slate-800 ring-1 ring-white/5"
-                      }`}
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
                     >
-                      <div
-                        className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-sm transform transition-transform duration-500 ${
-                          isEditMode ? "translate-x-5" : "translate-x-0"
-                        }`}
+                      <path
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        fill="#4285F4"
                       />
-                    </div>
-                  </div>
+                      <path
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        fill="#34A853"
+                      />
+                      <path
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                        fill="#FBBC05"
+                      />
+                      <path
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        fill="#EA4335"
+                      />
+                    </svg>
+                  ) : currentUser?.providerData?.some(
+                      (p) => p.providerId === "github.com"
+                    ) ? (
+                    <Github size={18} />
+                  ) : currentUser?.providerData?.some(
+                      (p) => p.providerId === "twitter.com"
+                    ) ? (
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                    </svg>
+                  ) : (
+                    <Mail size={18} />
+                  )}
+                </div>
+              </div>
 
-                  {/* Show Edit Options Only in Edit Mode */}
-                  {isEditMode && (
-                    <>
-                      {/* NEW: Mobile Public/Private Toggle */}
-                      <div
-                        onClick={() => setIsPublic(!isPublic)}
-                        className="flex items-center justify-between px-4 py-3 mt-2 rounded-xl bg-white/5 border border-white/5 cursor-pointer active:scale-95 transition-all"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`p-1.5 rounded-lg ${
-                              isPublic
-                                ? "bg-green-500/20 text-green-500"
-                                : "bg-red-500/20 text-red-500"
-                            }`}
-                          >
-                            {isPublic ? (
-                              <Globe size={16} />
-                            ) : (
-                              <Lock size={16} />
-                            )}
-                          </div>
-                          <span
-                            className={
-                              isPublic
-                                ? "text-green-500 font-medium"
-                                : "text-red-500 font-medium"
-                            }
-                          >
-                            {isPublic ? "Public Profile" : "Private Profile"}
-                          </span>
-                        </div>
-                        {/* Switch UI */}
-                        <div
-                          className={`relative w-11 h-6 rounded-full transition-colors duration-500 ease-out border border-white/5 ${
-                            isPublic
-                              ? "bg-green-500/20 ring-1 ring-green-500/50"
-                              : "bg-red-500/20 ring-1 ring-red-500/50"
+              <nav className="flex flex-col gap-2">
+                <MobileNavItem
+                  to={`/${routeParam}/overview`}
+                  icon={<User size={18} />}
+                  label="Overview"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                />
+                <MobileNavItem
+                  to={`/${routeParam}/projects`}
+                  icon={<Briefcase size={18} />}
+                  label="Projects"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                />
+
+                {/* Settings & Edit Mode - Owner Only */}
+                {isOwner && (
+                  <>
+                    <MobileNavItem
+                      to={`/${routeParam}/settings`}
+                      icon={<Settings size={18} />}
+                      label="Settings"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    />
+
+                    {/* --- MOBILE EDIT MODE TOGGLE --- */}
+                    <div
+                      onClick={() => setIsEditMode(!isEditMode)}
+                      className="flex items-center justify-between px-4 py-3 mt-2 rounded-xl bg-white/5 border border-white/5 cursor-pointer active:scale-95 transition-all"
+                    >
+                      <div className="flex items-baseline gap-3">
+                        <span className="text-gray-400">Mode</span>
+                        <span
+                          className={`text-xs font-black tracking-[0.15em] uppercase ${
+                            isEditMode ? "text-orange-500" : "text-gray-500"
                           }`}
                         >
-                          <div
-                            className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-sm transform transition-transform duration-500 ${
-                              isPublic ? "translate-x-5" : "translate-x-0"
-                            }`}
-                          />
-                        </div>
+                          {isEditMode ? "EDITING" : "VIEWING"}
+                        </span>
                       </div>
 
-                      {/* NEW: Mobile Save Button */}
-                      <button
-                        onClick={() => {
-                          handleGlobalSave();
-                          // Only close menu automatically if successful
-                          setTimeout(() => {
-                            setIsMobileMenuOpen(false);
-                          }, 1500);
-                        }}
-                        disabled={isSaving}
-                        className={`w-full flex items-center justify-center gap-2 mt-2 px-4 py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all duration-300 ${
-                          isSaving
-                            ? saveSuccess
-                              ? "bg-green-600 text-white shadow-green-900/20"
-                              : "bg-red-600 text-white shadow-red-900/20"
-                            : "bg-orange-600 text-white shadow-orange-900/20"
+                      <div
+                        className={`relative w-11 h-6 rounded-full transition-colors duration-500 ease-out border border-white/5 ${
+                          isEditMode
+                            ? "bg-orange-500/20 ring-1 ring-orange-500/50"
+                            : "bg-slate-800 ring-1 ring-white/5"
                         }`}
                       >
-                        {isSaving ? (
-                          saveSuccess ? (
-                            <Check size={18} />
-                          ) : (
-                            <AlertCircle size={18} />
-                          )
-                        ) : (
-                          <Save size={18} />
-                        )}
-                        {isSaving
-                          ? saveSuccess
-                            ? "Saved Successfully!"
-                            : "No Changes detected"
-                          : "Save Changes"}
-                      </button>
+                        <div
+                          className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-sm transform transition-transform duration-500 ${
+                            isEditMode ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
+                      </div>
+                    </div>
 
-                      {/* --- MOBILE HEADER LAYOUT SELECTOR --- */}
-                      <div className="p-4 mt-2 bg-white/5 rounded-xl border border-white/5">
-                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-3">
-                          Header Style
-                        </span>
-                        {/* UPDATED: Changed from grid-cols-4 to grid-cols-3 */}
-                        <div className="grid grid-cols-3 gap-2">
-                          {[
-                            {
-                              id: "standard",
-                              icon: <Minimize size={16} />,
-                            },
-                            { id: "sticky", icon: <Maximize size={16} /> },
-                            /* HIDDEN: Left sidebar option removed for mobile/tab */
-                            {
-                              id: "bottom",
-                              icon: <PanelBottom size={16} />,
-                            },
-                          ].map((opt) => (
-                            <button
-                              key={opt.id}
-                              onClick={() => setHeaderLayout(opt.id)}
-                              className={`flex items-center justify-center p-2 rounded-lg border transition-all ${
-                                headerLayout === opt.id ||
-                                (headerLayout === "left" &&
-                                  opt.id === "standard")
-                                  ? "bg-orange-500/20 border-orange-500 text-orange-500"
-                                  : "bg-white/5 border-transparent text-gray-400"
+                    {/* Show Edit Options Only in Edit Mode */}
+                    {isEditMode && (
+                      <>
+                        {/* --- MOBILE NAME & COLOR EDITOR --- */}
+                        <div className="mt-2 rounded-xl bg-white/5 border border-white/5 overflow-hidden transition-all duration-300">
+                          <button
+                            onClick={() =>
+                              setIsMobileNameEditorOpen(!isMobileNameEditorOpen)
+                            }
+                            className="w-full flex items-center justify-between px-4 py-3 text-left active:bg-white/5 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  isMobileNameEditorOpen
+                                    ? "bg-orange-500 text-white"
+                                    : "bg-orange-500/20 text-orange-500"
+                                }`}
+                              >
+                                <Palette size={16} />
+                              </div>
+                              <span
+                                className={`text-sm font-medium ${
+                                  isMobileNameEditorOpen
+                                    ? "text-white"
+                                    : "text-gray-200"
+                                }`}
+                              >
+                                Customize Name
+                              </span>
+                            </div>
+                            <ChevronDown
+                              size={16}
+                              className={`text-gray-500 transition-transform duration-300 ${
+                                isMobileNameEditorOpen ? "rotate-180" : ""
+                              }`}
+                            />
+                          </button>
+
+                          <div
+                            className={`px-4 space-y-4 transition-all duration-300 ease-in-out ${
+                              isMobileNameEditorOpen
+                                ? "max-h-[500px] opacity-100 pb-4 pt-1"
+                                : "max-h-0 opacity-0"
+                            }`}
+                          >
+                            <div className="p-4 bg-black/40 rounded-lg border border-white/5 flex flex-col items-center justify-center gap-1 shadow-inner">
+                              <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">
+                                Preview
+                              </span>
+                              <span className="text-xl font-bold tracking-tight text-white break-all">
+                                {portfolioName.substring(0, highlightIndex)}
+                                <span className={highlightColor}>
+                                  {portfolioName.substring(highlightIndex)}
+                                </span>
+                              </span>
+                            </div>
+
+                            <div>
+                              <div className="flex justify-between items-center mb-1">
+                                <label className="text-[10px] text-gray-500 font-bold">
+                                  TEXT
+                                </label>
+                                <span
+                                  className={`text-[10px] ${
+                                    portfolioName.length === 15
+                                      ? "text-orange-500"
+                                      : "text-gray-600"
+                                  }`}
+                                >
+                                  {portfolioName.length}/15
+                                </span>
+                              </div>
+                              <input
+                                type="text"
+                                maxLength={15}
+                                value={portfolioName}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setPortfolioName(val);
+                                  if (val.length < highlightIndex) {
+                                    setHighlightIndex(val.length);
+                                  }
+                                }}
+                                className="w-full bg-[#0B1120] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 transition-colors"
+                                placeholder="Name"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] text-gray-500 font-bold mb-2 block">
+                                HIGHLIGHT COLOR
+                              </label>
+                              <div className="flex justify-between bg-[#0B1120] p-2 rounded-lg border border-white/5">
+                                {[
+                                  {
+                                    id: "orange",
+                                    class: "text-orange-500",
+                                    bg: "bg-orange-500",
+                                  },
+                                  {
+                                    id: "amber",
+                                    class: "text-amber-500",
+                                    bg: "bg-amber-500",
+                                  },
+                                  {
+                                    id: "green",
+                                    class: "text-emerald-400",
+                                    bg: "bg-emerald-400",
+                                  },
+                                  {
+                                    id: "cyan",
+                                    class: "text-cyan-400",
+                                    bg: "bg-cyan-400",
+                                  },
+                                  {
+                                    id: "blue",
+                                    class: "text-blue-500",
+                                    bg: "bg-blue-500",
+                                  },
+                                ].map((c) => (
+                                  <button
+                                    key={c.id}
+                                    onClick={() => setHighlightColor(c.class)}
+                                    className={`w-8 h-8 rounded-full transition-all duration-200 ${
+                                      c.bg
+                                    } ${
+                                      highlightColor === c.class
+                                        ? "ring-2 ring-white ring-offset-2 ring-offset-[#0B1120] scale-110 shadow-lg shadow-white/10"
+                                        : "opacity-60 hover:opacity-100"
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+
+                            <div>
+                              <div className="flex justify-between items-center mb-1">
+                                <label className="text-[10px] text-gray-500 font-bold">
+                                  SPLIT POSITION
+                                </label>
+                                <span className="text-[10px] text-orange-500 font-mono">
+                                  {highlightIndex}
+                                </span>
+                              </div>
+                              <input
+                                type="range"
+                                min="0"
+                                max={portfolioName.length}
+                                value={highlightIndex}
+                                onChange={(e) =>
+                                  setHighlightIndex(Number(e.target.value))
+                                }
+                                className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Mobile Public/Private Toggle */}
+                        <div
+                          onClick={() => setIsPublic(!isPublic)}
+                          className="flex items-center justify-between px-4 py-3 mt-2 rounded-xl bg-white/5 border border-white/5 cursor-pointer active:scale-95 transition-all"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`p-1.5 rounded-lg ${
+                                isPublic
+                                  ? "bg-green-500/20 text-green-500"
+                                  : "bg-red-500/20 text-red-500"
                               }`}
                             >
-                              {opt.icon}
-                            </button>
-                          ))}
+                              {isPublic ? (
+                                <Globe size={16} />
+                              ) : (
+                                <Lock size={16} />
+                              )}
+                            </div>
+                            <span
+                              className={
+                                isPublic
+                                  ? "text-green-500 font-medium"
+                                  : "text-red-500 font-medium"
+                              }
+                            >
+                              {isPublic ? "Public Profile" : "Private Profile"}
+                            </span>
+                          </div>
+                          <div
+                            className={`relative w-11 h-6 rounded-full transition-colors duration-500 ease-out border border-white/5 ${
+                              isPublic
+                                ? "bg-green-500/20 ring-1 ring-green-500/50"
+                                : "bg-red-500/20 ring-1 ring-red-500/50"
+                            }`}
+                          >
+                            <div
+                              className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-sm transform transition-transform duration-500 ${
+                                isPublic ? "translate-x-5" : "translate-x-0"
+                              }`}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    </>
-                  )}
 
-                  <div className="h-px bg-white/5 my-2"></div>
-                </>
-              )}
+                        {/* Mobile Save Button */}
+                        <button
+                          onClick={() => {
+                            handleGlobalSave();
+                            setTimeout(() => {
+                              setIsMobileMenuOpen(false);
+                            }, 1500);
+                          }}
+                          disabled={isSaving}
+                          className={`w-full flex items-center justify-center gap-2 mt-2 px-4 py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all duration-300 ${
+                            isSaving
+                              ? saveSuccess
+                                ? "bg-green-600 text-white shadow-green-900/20"
+                                : "bg-red-600 text-white shadow-red-900/20"
+                              : "bg-orange-600 text-white shadow-orange-900/20"
+                          }`}
+                        >
+                          {isSaving ? (
+                            saveSuccess ? (
+                              <Check size={18} />
+                            ) : (
+                              <AlertCircle size={18} />
+                            )
+                          ) : (
+                            <Save size={18} />
+                          )}
+                          {isSaving
+                            ? saveSuccess
+                              ? "Saved Successfully!"
+                              : "No Changes detected"
+                            : "Save Changes"}
+                        </button>
 
+                        {/* Mobile Header Layout */}
+                        <div className="p-4 mt-2 bg-white/5 rounded-xl border border-white/5">
+                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-3">
+                            Header Style
+                          </span>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[
+                              {
+                                id: "standard",
+                                icon: <Minimize size={16} />,
+                              },
+                              { id: "sticky", icon: <Maximize size={16} /> },
+                              {
+                                id: "bottom",
+                                icon: <PanelBottom size={16} />,
+                              },
+                            ].map((opt) => (
+                              <button
+                                key={opt.id}
+                                onClick={() => setHeaderLayout(opt.id)}
+                                className={`flex items-center justify-center p-2 rounded-lg border transition-all ${
+                                  headerLayout === opt.id ||
+                                  (headerLayout === "left" &&
+                                    opt.id === "standard")
+                                    ? "bg-orange-500/20 border-orange-500 text-orange-500"
+                                    : "bg-white/5 border-transparent text-gray-400"
+                                }`}
+                              >
+                                {opt.icon}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    {/* Spacer inside scrollable area */}
+                    <div className="h-px bg-white/5 my-2"></div>
+                  </>
+                )}
+              </nav>
+            </div>
+
+            {/* 3. FIXED FOOTER: Sign Out Button (Outside scrollable area) */}
+            <div className="shrink-0 mt-2 pt-2 border-t border-white/5">
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-red-400 hover:bg-red-500/10 w-full text-left"
@@ -1581,7 +2063,7 @@ const LiquidGlassPortfolioLayout = () => {
                 <LogOut size={18} />
                 <span className="font-medium">Sign Out</span>
               </button>
-            </nav>
+            </div>
           </div>
         </div>
       )}
@@ -1600,12 +2082,12 @@ const LiquidGlassPortfolioLayout = () => {
             : headerLayout === "bottom"
             ? "pt-8 pb-32"
             : "pt-28" // standard
-        } px-4 md:px-8 pb-10`}
+        } px-3 md:px-8 pb-10`}
       >
         {/* UPDATED: Dynamic Slide Direction based on Header Layout */}
         <div
           key={headerLayout} // Forces re-animation when layout changes
-          className={`max-w-[90%] mx-auto relative z-10 animate-in fade-in duration-700 ${
+          className={`w-full md:max-w-[90%] mx-auto relative z-10 animate-in fade-in duration-700 ${
             headerLayout === "left"
               ? "slide-in-from-right-8" // Loads from Right to Left for Sidebar
               : "slide-in-from-bottom-8" // Default Loads from Bottom Up

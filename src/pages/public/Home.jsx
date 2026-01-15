@@ -35,6 +35,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext"; // Added
 import defaultAvatar2 from "../../assets/default_avatar2.png";
+import logo from "../../assets/logo192.png"; // Imported Logo
 
 function Home() {
   const navigate = useNavigate();
@@ -201,9 +202,8 @@ function Home() {
               className="text-xl font-bold tracking-tighter cursor-pointer flex items-center gap-3"
               onClick={() => navigate("/")}
             >
-              <div className="w-10 h-10 bg-amber-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-orange-900/20">
-                P
-              </div>
+              {/* Replaced 'P' div with Image - No Background/Shadow */}
+              <img src={logo} alt="Logo" className="w-10 h-10 object-contain" />
               <span className="text-gray-200">
                 Portfoli<span className="text-amber-500">Me</span>
               </span>
