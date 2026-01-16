@@ -59,7 +59,7 @@ import { fetchUserRepositories } from "../../services/githubService";
 import { uploadFileToCloudinary } from "../../services/cloudinaryService";
 import { decryptData } from "../../lib/secureStorage"; // Import Decryption
 import UserSkillsModal from "../../modals/UserSkillsModal";
-import OnboardingModal from "../../modals/OnboardingModal"; // Added Import
+// Removed OnboardingModal import
 
 // --- NEW: Import the default avatar image ---
 import defaultAvatar from "../../assets/default_avatar2.png";
@@ -225,8 +225,7 @@ export default function LiquidGlassUserHome() {
   const [profileIsOnline, setProfileIsOnline] = useState(false);
   const [uploading, setUploading] = useState({ avatar: false, cover: false });
 
-  // NEW: Force Onboarding if setup not complete
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  // Removed showOnboarding state (moved to Layout)
 
   // Initial state uses defaultAvatar to prevent empty src errors
   const [profile, setProfile] = useState({
@@ -569,11 +568,7 @@ export default function LiquidGlassUserHome() {
   const applyProfileData = (data) => {
     console.group("🔍 [DEBUG] applyProfileData Execution");
 
-    // CHECK: If setup is false and I am the owner, trigger the modal
-    if (isOwner && data.setupComplete === false) {
-      console.warn("⚠️ Setup not complete. Triggering onboarding.");
-      setShowOnboarding(true);
-    }
+    // CHECK: Onboarding logic moved to LiquidGlassPortfolioLayout.jsx
 
     // [NEW - CORRECT]
     // Remove currentUser?.photoURL. If data has no photo, go straight to default.
@@ -745,19 +740,7 @@ export default function LiquidGlassUserHome() {
         </div>
       </div>
 
-      {/* Onboarding Logic for Reloads - Portal used to break out of layout stacking contexts */}
-      {showOnboarding &&
-        isOwner &&
-        createPortal(
-          <OnboardingModal
-            user={currentUser}
-            onComplete={() => {
-              setShowOnboarding(false);
-              loadUserDataWithRetry(); // Reload data after completion
-            }}
-          />,
-          document.body
-        )}
+      {/* Onboarding Logic moved to LiquidGlassPortfolioLayout.jsx */}
     </div>
   );
 }

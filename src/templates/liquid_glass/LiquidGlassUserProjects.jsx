@@ -15,14 +15,14 @@ import {
 import {
   Plus,
   Search,
-  LogIn, // NEW: Imported LogIn icon
+  LogIn,
   LayoutGrid,
   List as ListIcon,
   Loader2,
   Trash2,
   Edit2,
-  Eye, // NEW: Icon for visible
-  EyeOff, // NEW: Icon for hidden
+  Eye,
+  EyeOff,
   Github,
   ExternalLink,
   Calendar,
@@ -31,6 +31,7 @@ import {
   ThumbsUp,
   MessageSquare,
   Info,
+  ImageOff, // NEW: Added ImageOff icon
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -827,7 +828,22 @@ const ProjectGridCard = React.memo(
       `}
       >
         <div className="relative h-32 sm:h-48 overflow-hidden bg-black/20">
-          {project.image?.endsWith(".json") ? (
+          {!project.image ? (
+            // NEW: No Image Placeholder Design
+            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0B1120] via-[#161b2c] to-[#0B1120] transition-transform duration-500 group-hover:scale-110">
+              {/* Subtle background pattern */}
+              <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent" />
+
+              <div className="relative z-10 flex flex-col items-center gap-2">
+                <div className="p-3 rounded-full bg-white/5 border border-white/5 shadow-lg">
+                  <ImageOff className="text-gray-600" size={24} />
+                </div>
+                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">
+                  No Preview
+                </span>
+              </div>
+            </div>
+          ) : project.image.endsWith(".json") ? (
             <div className="w-full h-full transition-transform duration-500 group-hover:scale-110 p-2">
               <LottieRenderer url={project.image} className="w-full h-full" />
             </div>
@@ -1090,17 +1106,31 @@ const ProjectListCard = ({
       `}
     >
       {/* REDESIGN: Reduced mobile width (w-24 vs w-28) to help aspect ratio and reduce height */}
-      <div className="w-24 sm:w-56 relative flex-shrink-0 bg-black/20">
+      <div className="w-24 sm:w-56 relative flex-shrink-0 bg-black/20 overflow-hidden">
         {/* NEW: Check for Lottie JSON or Image */}
-        {project.image?.endsWith(".json") ? (
+        {!project.image ? (
+          // NEW: No Image Placeholder Design (Absolute positioning for List View)
+          <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0B1120] via-[#161b2c] to-[#0B1120] transition-transform duration-500 group-hover:scale-110">
+            <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent" />
+            <div className="relative z-10 flex flex-col items-center gap-1 sm:gap-2">
+              <div className="p-2 sm:p-3 rounded-full bg-white/5 border border-white/5 shadow-lg">
+                <ImageOff className="text-gray-600 w-4 h-4 sm:w-6 sm:h-6" />
+              </div>
+              {/* Hidden on very small mobile to save space, visible on sm+ */}
+              <span className="hidden sm:block text-[10px] font-bold text-gray-600 uppercase tracking-widest">
+                No Preview
+              </span>
+            </div>
+          </div>
+        ) : project.image?.endsWith(".json") ? (
           <div className="absolute inset-0 p-1">
             <LottieRenderer url={project.image} className="w-full h-full" />
           </div>
         ) : (
           <img
-            src={project.image || "https://via.placeholder.com/400"}
+            src={project.image}
             alt={project.title}
-            className="w-full h-full object-cover absolute inset-0"
+            className="w-full h-full object-cover absolute inset-0 transition-transform duration-500 group-hover:scale-110"
           />
         )}
 

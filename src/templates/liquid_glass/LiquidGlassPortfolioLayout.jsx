@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react"; // Added useRef
+import { createPortal } from "react-dom"; // NEW: For Onboarding Modal
 // UPDATED: Added query imports
 import {
   doc,
@@ -51,6 +52,7 @@ import {
 
 // NEW: Import Cloudinary Service
 import { uploadFileToCloudinary } from "../../services/cloudinaryService";
+import OnboardingModal from "../../modals/OnboardingModal"; // NEW: Import Onboarding
 
 const LiquidGlassPortfolioLayout = () => {
   const { username: routeParam } = useParams(); // UPDATED: Renamed to routeParam (could be 'Niviru' or 'uid')
@@ -200,6 +202,7 @@ const LiquidGlassPortfolioLayout = () => {
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false); // NEW: State for onboarding
 
   // --- NEW: Handle Header Image Upload (Direct Upload) ---
   const handleHeaderImageUpload = async (e) => {
@@ -270,6 +273,17 @@ const LiquidGlassPortfolioLayout = () => {
 
           // Set Baseline
           setOriginalSettings(fetchedSettings);
+
+          // NEW: Check Onboarding Status (Moved from Home)
+          // Using currentUser.uid ensures we only check for the logged-in owner
+          if (
+            currentUser?.uid &&
+            currentUser.uid === resolvedUid &&
+            (data.setupComplete === false ||
+              data.githubConfigured === undefined)
+          ) {
+            setShowOnboarding(true);
+          }
         }
       } catch (error) {
         console.error("Error fetching settings:", error);
@@ -1088,20 +1102,20 @@ const LiquidGlassPortfolioLayout = () => {
                   <button
                     onClick={handleGlobalSave}
                     disabled={isSaving}
-                    className={`flex items-center transition-all duration-300 group cursor-pointer
+                    className={`flex items-center transition-all duration-300 group cursor-pointer border
                       ${
                         headerLayout === "left"
-                          ? `w-full rounded-xl hover:bg-orange-600/20 ${
+                          ? `w-full rounded-xl border-transparent hover:bg-orange-500/10 hover:border-orange-500/30 ${
                               isSidebarCollapsed
                                 ? "justify-center p-3 mx-auto w-12 h-12"
                                 : "px-4 py-3 gap-3"
                             }`
-                          : `p-2 rounded-full shadow-lg active:scale-95 ${
+                          : `p-2 rounded-full active:scale-95 ${
                               isSaving
                                 ? saveSuccess
-                                  ? "bg-green-600 text-white shadow-green-500/20"
-                                  : "bg-red-600 text-white shadow-red-500/20"
-                                : "bg-orange-600 hover:bg-orange-500 text-white shadow-orange-500/20"
+                                  ? "bg-green-500/20 border-green-500/50 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.3)]"
+                                  : "bg-red-500/20 border-red-500/50 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]"
+                                : "bg-orange-500/10 backdrop-blur-xl border-orange-500/50 text-orange-100 shadow-[0_0_15px_-3px_rgba(249,115,22,0.4)] hover:bg-orange-500/20 hover:text-white hover:border-orange-500"
                             }`
                       }
                     `}
@@ -1159,7 +1173,7 @@ const LiquidGlassPortfolioLayout = () => {
                             ? saveSuccess
                               ? "text-green-500"
                               : "text-red-500"
-                            : "text-orange-500"
+                            : "text-orange-500" // UPDATED: Changed from blue to orange
                         }`}
                       >
                         {isSaving
@@ -1619,49 +1633,37 @@ const LiquidGlassPortfolioLayout = () => {
         </header>
       )}
 
-      {/* --- MOBILE MENU --- */}
+      {/* --- MOBILE MENU (UPDATED: Fixed Right Side, Full Height, Compact) --- */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-[60] xl:hidden">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-md"
             onClick={() => setIsMobileMenuOpen(false)}
           />
-          <div
-            /* UPDATED: flex flex-col and overflow-hidden ensures fixed header/footer behavior */
-            className={`absolute bg-[#0B1120] border border-white/10 rounded-2xl p-3 shadow-2xl duration-300 max-h-[80vh] flex flex-col overflow-hidden
-              ${
-                headerLayout === "bottom"
-                  ? /* Dock Layout */
-                    "bottom-24 right-4 w-72 animate-in slide-in-from-bottom-4 origin-bottom-right md:bottom-28 md:right-8"
-                  : /* Standard/Top Layouts */
-                    "top-20 right-4 w-72 animate-in slide-in-from-top-4 origin-top-right md:right-8"
-              }
-            `}
-          >
+          <div className="absolute top-0 right-0 h-full w-64 bg-[#0B1120] border-l border-white/10 shadow-2xl duration-300 flex flex-col overflow-hidden animate-in slide-in-from-right">
             {/* 1. FIXED HEADER ROW: Menu Text & Close Button */}
-            <div className="flex justify-between items-center mb-4 shrink-0">
-              <span className="text-base font-bold text-gray-500 uppercase tracking-wider">
+            <div className="flex justify-between items-center p-4 border-b border-white/5 shrink-0">
+              <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">
                 Menu
               </span>
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="p-2 bg-white/5 rounded-full text-white hover:bg-white/10 transition-colors"
+                className="p-1.5 bg-white/5 rounded-full text-white hover:bg-white/10 transition-colors"
               >
-                <X size={20} />
+                <X size={16} />
               </button>
             </div>
 
             {/* 2. SCROLLABLE CONTENT AREA (User Details + Links + Settings) */}
-            {/* Added -mr-2 pr-2 to handle scrollbar visuals nicely while keeping padding */}
-            <div className="flex-1 overflow-y-auto min-h-0 -mr-2 pr-2 custom-scrollbar">
-              {/* User Details Card */}
-              <div className="bg-white/5 rounded-xl p-4 border border-white/5 flex items-center justify-between gap-3 mb-4">
+            <div className="flex-1 overflow-y-auto min-h-0 p-3 custom-scrollbar">
+              {/* User Details Card (Compact) */}
+              <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex items-center justify-between gap-3 mb-3">
                 <div className="overflow-hidden flex-1">
-                  <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1">
+                  <p className="text-[9px] text-gray-500 font-medium uppercase tracking-wider mb-0.5">
                     Signed in as
                   </p>
                   <p
-                    className="text-sm font-bold text-white truncate"
+                    className="text-xs font-bold text-white truncate"
                     title={currentUser?.email}
                   >
                     {currentUser?.providerData?.some(
@@ -1671,14 +1673,14 @@ const LiquidGlassPortfolioLayout = () => {
                       : currentUser?.email}
                   </p>
                 </div>
-                {/* Service Icon - Shows Auth Type */}
-                <div className="shrink-0 p-2 bg-white/5 rounded-lg border border-white/5 text-gray-300 flex items-center justify-center">
+                {/* Service Icon */}
+                <div className="shrink-0 p-1.5 bg-white/5 rounded-lg border border-white/5 text-gray-300 flex items-center justify-center">
                   {currentUser?.providerData?.some(
                     (p) => p.providerId === "google.com"
                   ) ? (
                     <svg
-                      width="18"
-                      height="18"
+                      width="14"
+                      height="14"
                       viewBox="0 0 24 24"
                       xmlns="http://www.w3.org/2000/svg"
                     >
@@ -1702,13 +1704,13 @@ const LiquidGlassPortfolioLayout = () => {
                   ) : currentUser?.providerData?.some(
                       (p) => p.providerId === "github.com"
                     ) ? (
-                    <Github size={18} />
+                    <Github size={14} />
                   ) : currentUser?.providerData?.some(
                       (p) => p.providerId === "twitter.com"
                     ) ? (
                     <svg
-                      width="16"
-                      height="16"
+                      width="14"
+                      height="14"
                       viewBox="0 0 24 24"
                       fill="currentColor"
                       xmlns="http://www.w3.org/2000/svg"
@@ -1716,21 +1718,21 @@ const LiquidGlassPortfolioLayout = () => {
                       <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                     </svg>
                   ) : (
-                    <Mail size={18} />
+                    <Mail size={14} />
                   )}
                 </div>
               </div>
 
-              <nav className="flex flex-col gap-2">
+              <nav className="flex flex-col gap-1">
                 <MobileNavItem
                   to={`/${routeParam}/overview`}
-                  icon={<User size={18} />}
+                  icon={<User size={16} />}
                   label="Overview"
                   onClick={() => setIsMobileMenuOpen(false)}
                 />
                 <MobileNavItem
                   to={`/${routeParam}/projects`}
-                  icon={<Briefcase size={18} />}
+                  icon={<Briefcase size={16} />}
                   label="Projects"
                   onClick={() => setIsMobileMenuOpen(false)}
                 />
@@ -1740,7 +1742,7 @@ const LiquidGlassPortfolioLayout = () => {
                   <>
                     <MobileNavItem
                       to={`/${routeParam}/settings`}
-                      icon={<Settings size={18} />}
+                      icon={<Settings size={16} />}
                       label="Settings"
                       onClick={() => setIsMobileMenuOpen(false)}
                     />
@@ -1748,12 +1750,12 @@ const LiquidGlassPortfolioLayout = () => {
                     {/* --- MOBILE EDIT MODE TOGGLE --- */}
                     <div
                       onClick={() => setIsEditMode(!isEditMode)}
-                      className="flex items-center justify-between px-4 py-3 mt-2 rounded-xl bg-white/5 border border-white/5 cursor-pointer active:scale-95 transition-all"
+                      className="flex items-center justify-between px-3 py-2 mt-2 rounded-lg bg-white/5 border border-white/5 cursor-pointer active:scale-95 transition-all"
                     >
-                      <div className="flex items-baseline gap-3">
-                        <span className="text-gray-400">Mode</span>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-gray-400 text-xs">Mode</span>
                         <span
-                          className={`text-xs font-black tracking-[0.15em] uppercase ${
+                          className={`text-[10px] font-black tracking-[0.15em] uppercase ${
                             isEditMode ? "text-orange-500" : "text-gray-500"
                           }`}
                         >
@@ -1762,15 +1764,15 @@ const LiquidGlassPortfolioLayout = () => {
                       </div>
 
                       <div
-                        className={`relative w-11 h-6 rounded-full transition-colors duration-500 ease-out border border-white/5 ${
+                        className={`relative w-9 h-5 rounded-full transition-colors duration-500 ease-out border border-white/5 ${
                           isEditMode
                             ? "bg-orange-500/20 ring-1 ring-orange-500/50"
                             : "bg-slate-800 ring-1 ring-white/5"
                         }`}
                       >
                         <div
-                          className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-sm transform transition-transform duration-500 ${
-                            isEditMode ? "translate-x-5" : "translate-x-0"
+                          className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] bg-white rounded-full shadow-sm transform transition-transform duration-500 ${
+                            isEditMode ? "translate-x-4" : "translate-x-0"
                           }`}
                         />
                       </div>
@@ -1780,25 +1782,25 @@ const LiquidGlassPortfolioLayout = () => {
                     {isEditMode && (
                       <>
                         {/* --- MOBILE NAME & COLOR EDITOR --- */}
-                        <div className="mt-2 rounded-xl bg-white/5 border border-white/5 overflow-hidden transition-all duration-300">
+                        <div className="mt-2 rounded-lg bg-white/5 border border-white/5 overflow-hidden transition-all duration-300">
                           <button
                             onClick={() =>
                               setIsMobileNameEditorOpen(!isMobileNameEditorOpen)
                             }
-                            className="w-full flex items-center justify-between px-4 py-3 text-left active:bg-white/5 transition-colors"
+                            className="w-full flex items-center justify-between px-3 py-2 text-left active:bg-white/5 transition-colors"
                           >
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                               <div
-                                className={`p-1.5 rounded-lg transition-colors ${
+                                className={`p-1 rounded-md transition-colors ${
                                   isMobileNameEditorOpen
                                     ? "bg-orange-500 text-white"
                                     : "bg-orange-500/20 text-orange-500"
                                 }`}
                               >
-                                <Palette size={16} />
+                                <Palette size={14} />
                               </div>
                               <span
-                                className={`text-sm font-medium ${
+                                className={`text-xs font-medium ${
                                   isMobileNameEditorOpen
                                     ? "text-white"
                                     : "text-gray-200"
@@ -1808,7 +1810,7 @@ const LiquidGlassPortfolioLayout = () => {
                               </span>
                             </div>
                             <ChevronDown
-                              size={16}
+                              size={14}
                               className={`text-gray-500 transition-transform duration-300 ${
                                 isMobileNameEditorOpen ? "rotate-180" : ""
                               }`}
@@ -1816,17 +1818,17 @@ const LiquidGlassPortfolioLayout = () => {
                           </button>
 
                           <div
-                            className={`px-4 space-y-4 transition-all duration-300 ease-in-out ${
+                            className={`px-3 space-y-3 transition-all duration-300 ease-in-out ${
                               isMobileNameEditorOpen
-                                ? "max-h-[500px] opacity-100 pb-4 pt-1"
+                                ? "max-h-[500px] opacity-100 pb-3 pt-1"
                                 : "max-h-0 opacity-0"
                             }`}
                           >
-                            <div className="p-4 bg-black/40 rounded-lg border border-white/5 flex flex-col items-center justify-center gap-1 shadow-inner">
-                              <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">
+                            <div className="p-3 bg-black/40 rounded-lg border border-white/5 flex flex-col items-center justify-center gap-1 shadow-inner">
+                              <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mb-1">
                                 Preview
                               </span>
-                              <span className="text-xl font-bold tracking-tight text-white break-all">
+                              <span className="text-sm font-bold tracking-tight text-white break-all">
                                 {portfolioName.substring(0, highlightIndex)}
                                 <span className={highlightColor}>
                                   {portfolioName.substring(highlightIndex)}
@@ -1836,11 +1838,11 @@ const LiquidGlassPortfolioLayout = () => {
 
                             <div>
                               <div className="flex justify-between items-center mb-1">
-                                <label className="text-[10px] text-gray-500 font-bold">
+                                <label className="text-[9px] text-gray-500 font-bold">
                                   TEXT
                                 </label>
                                 <span
-                                  className={`text-[10px] ${
+                                  className={`text-[9px] ${
                                     portfolioName.length === 15
                                       ? "text-orange-500"
                                       : "text-gray-600"
@@ -1860,16 +1862,16 @@ const LiquidGlassPortfolioLayout = () => {
                                     setHighlightIndex(val.length);
                                   }
                                 }}
-                                className="w-full bg-[#0B1120] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 transition-colors"
+                                className="w-full bg-[#0B1120] border border-white/10 rounded-md px-2 py-1.5 text-xs text-white focus:outline-none focus:border-orange-500 transition-colors"
                                 placeholder="Name"
                               />
                             </div>
 
                             <div>
-                              <label className="text-[10px] text-gray-500 font-bold mb-2 block">
+                              <label className="text-[9px] text-gray-500 font-bold mb-2 block">
                                 HIGHLIGHT COLOR
                               </label>
-                              <div className="flex justify-between bg-[#0B1120] p-2 rounded-lg border border-white/5">
+                              <div className="flex justify-between bg-[#0B1120] p-1.5 rounded-lg border border-white/5">
                                 {[
                                   {
                                     id: "orange",
@@ -1900,7 +1902,7 @@ const LiquidGlassPortfolioLayout = () => {
                                   <button
                                     key={c.id}
                                     onClick={() => setHighlightColor(c.class)}
-                                    className={`w-8 h-8 rounded-full transition-all duration-200 ${
+                                    className={`w-6 h-6 rounded-full transition-all duration-200 ${
                                       c.bg
                                     } ${
                                       highlightColor === c.class
@@ -1914,10 +1916,10 @@ const LiquidGlassPortfolioLayout = () => {
 
                             <div>
                               <div className="flex justify-between items-center mb-1">
-                                <label className="text-[10px] text-gray-500 font-bold">
+                                <label className="text-[9px] text-gray-500 font-bold">
                                   SPLIT POSITION
                                 </label>
-                                <span className="text-[10px] text-orange-500 font-mono">
+                                <span className="text-[9px] text-orange-500 font-mono">
                                   {highlightIndex}
                                 </span>
                               </div>
@@ -1929,7 +1931,7 @@ const LiquidGlassPortfolioLayout = () => {
                                 onChange={(e) =>
                                   setHighlightIndex(Number(e.target.value))
                                 }
-                                className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                                className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
                               />
                             </div>
                           </div>
@@ -1938,101 +1940,66 @@ const LiquidGlassPortfolioLayout = () => {
                         {/* Mobile Public/Private Toggle */}
                         <div
                           onClick={() => setIsPublic(!isPublic)}
-                          className="flex items-center justify-between px-4 py-3 mt-2 rounded-xl bg-white/5 border border-white/5 cursor-pointer active:scale-95 transition-all"
+                          className="flex items-center justify-between px-3 py-2 mt-2 rounded-lg bg-white/5 border border-white/5 cursor-pointer active:scale-95 transition-all"
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
                             <div
-                              className={`p-1.5 rounded-lg ${
+                              className={`p-1 rounded-md ${
                                 isPublic
                                   ? "bg-green-500/20 text-green-500"
                                   : "bg-red-500/20 text-red-500"
                               }`}
                             >
                               {isPublic ? (
-                                <Globe size={16} />
+                                <Globe size={14} />
                               ) : (
-                                <Lock size={16} />
+                                <Lock size={14} />
                               )}
                             </div>
                             <span
-                              className={
-                                isPublic
-                                  ? "text-green-500 font-medium"
-                                  : "text-red-500 font-medium"
-                              }
+                              className={`text-xs font-medium ${
+                                isPublic ? "text-green-500" : "text-red-500"
+                              }`}
                             >
                               {isPublic ? "Public Profile" : "Private Profile"}
                             </span>
                           </div>
                           <div
-                            className={`relative w-11 h-6 rounded-full transition-colors duration-500 ease-out border border-white/5 ${
+                            className={`relative w-9 h-5 rounded-full transition-colors duration-500 ease-out border border-white/5 ${
                               isPublic
                                 ? "bg-green-500/20 ring-1 ring-green-500/50"
                                 : "bg-red-500/20 ring-1 ring-red-500/50"
                             }`}
                           >
                             <div
-                              className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-sm transform transition-transform duration-500 ${
-                                isPublic ? "translate-x-5" : "translate-x-0"
+                              className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] bg-white rounded-full shadow-sm transform transition-transform duration-500 ${
+                                isPublic ? "translate-x-4" : "translate-x-0"
                               }`}
                             />
                           </div>
                         </div>
 
-                        {/* Mobile Save Button */}
-                        <button
-                          onClick={() => {
-                            handleGlobalSave();
-                            setTimeout(() => {
-                              setIsMobileMenuOpen(false);
-                            }, 1500);
-                          }}
-                          disabled={isSaving}
-                          className={`w-full flex items-center justify-center gap-2 mt-2 px-4 py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all duration-300 ${
-                            isSaving
-                              ? saveSuccess
-                                ? "bg-green-600 text-white shadow-green-900/20"
-                                : "bg-red-600 text-white shadow-red-900/20"
-                              : "bg-orange-600 text-white shadow-orange-900/20"
-                          }`}
-                        >
-                          {isSaving ? (
-                            saveSuccess ? (
-                              <Check size={18} />
-                            ) : (
-                              <AlertCircle size={18} />
-                            )
-                          ) : (
-                            <Save size={18} />
-                          )}
-                          {isSaving
-                            ? saveSuccess
-                              ? "Saved Successfully!"
-                              : "No Changes detected"
-                            : "Save Changes"}
-                        </button>
-
                         {/* Mobile Header Layout */}
-                        <div className="p-4 mt-2 bg-white/5 rounded-xl border border-white/5">
-                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-3">
+                        <div className="p-3 mt-2 bg-white/5 rounded-lg border border-white/5">
+                          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mb-2">
                             Header Style
                           </span>
                           <div className="grid grid-cols-3 gap-2">
                             {[
                               {
                                 id: "standard",
-                                icon: <Minimize size={16} />,
+                                icon: <Minimize size={14} />,
                               },
-                              { id: "sticky", icon: <Maximize size={16} /> },
+                              { id: "sticky", icon: <Maximize size={14} /> },
                               {
                                 id: "bottom",
-                                icon: <PanelBottom size={16} />,
+                                icon: <PanelBottom size={14} />,
                               },
                             ].map((opt) => (
                               <button
                                 key={opt.id}
                                 onClick={() => setHeaderLayout(opt.id)}
-                                className={`flex items-center justify-center p-2 rounded-lg border transition-all ${
+                                className={`flex items-center justify-center p-1.5 rounded-md border transition-all ${
                                   headerLayout === opt.id ||
                                   (headerLayout === "left" &&
                                     opt.id === "standard")
@@ -2045,23 +2012,51 @@ const LiquidGlassPortfolioLayout = () => {
                             ))}
                           </div>
                         </div>
+
+                        {/* Mobile Save Button (MOVED HERE) */}
+                        <button
+                          onClick={handleGlobalSave} // UPDATED: Removed the setTimeout/close logic
+                          disabled={isSaving}
+                          className={`w-full flex items-center justify-center gap-2 mt-2 px-3 py-2.5 rounded-lg text-xs font-bold border backdrop-blur-md active:scale-95 transition-all duration-300 ${
+                            isSaving
+                              ? saveSuccess
+                                ? "bg-green-900/30 border-green-500/50 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.2)]"
+                                : "bg-red-900/30 border-red-500/50 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                              : "bg-orange-500/10 border-orange-500/50 text-orange-100 shadow-[0_0_15px_-3px_rgba(249,115,22,0.3)] hover:bg-orange-500/20 hover:border-orange-500 hover:text-white"
+                          }`}
+                        >
+                          {isSaving ? (
+                            saveSuccess ? (
+                              <Check size={14} />
+                            ) : (
+                              <AlertCircle size={14} />
+                            )
+                          ) : (
+                            <Save size={14} />
+                          )}
+                          {isSaving
+                            ? saveSuccess
+                              ? "Saved Successfully!"
+                              : "No Changes detected"
+                            : "Save Changes"}
+                        </button>
                       </>
                     )}
                     {/* Spacer inside scrollable area */}
-                    <div className="h-px bg-white/5 my-2"></div>
+                    <div className="h-px bg-white/5 my-1"></div>
                   </>
                 )}
               </nav>
             </div>
 
-            {/* 3. FIXED FOOTER: Sign Out Button (Outside scrollable area) */}
-            <div className="shrink-0 mt-2 pt-2 border-t border-white/5">
+            {/* 3. FIXED FOOTER: Sign Out Button */}
+            <div className="shrink-0 p-3 border-t border-white/5">
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-red-400 hover:bg-red-500/10 w-full text-left"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-red-400 hover:bg-red-500/10 w-full text-left"
               >
-                <LogOut size={18} />
-                <span className="font-medium">Sign Out</span>
+                <LogOut size={16} />
+                <span className="text-sm font-medium">Sign Out</span>
               </button>
             </div>
           </div>
@@ -2219,6 +2214,20 @@ const LiquidGlassPortfolioLayout = () => {
           )}
         </div>
       </main>
+
+      {/* NEW: Onboarding Modal (Global Level) */}
+      {showOnboarding &&
+        isOwner &&
+        createPortal(
+          <OnboardingModal
+            user={currentUser}
+            onComplete={() => {
+              setShowOnboarding(false);
+              // Optionally trigger a re-fetch of settings here if needed
+            }}
+          />,
+          document.body
+        )}
     </div>
   );
 };
@@ -2272,7 +2281,7 @@ const MobileNavItem = ({ to, icon, label, onClick }) => (
     to={to}
     onClick={onClick}
     className={({ isActive }) =>
-      `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 border
+      `flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 border
        ${
          isActive
            ? "bg-white/10 backdrop-blur-md border-orange-500/30 text-white shadow-[0_0_15px_-3px_rgba(249,115,22,0.2)]"
@@ -2281,7 +2290,7 @@ const MobileNavItem = ({ to, icon, label, onClick }) => (
     }
   >
     {icon}
-    <span className="font-medium">{label}</span>
+    <span className="text-sm font-medium">{label}</span>
   </NavLink>
 );
 

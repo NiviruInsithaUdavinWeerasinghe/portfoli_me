@@ -496,6 +496,8 @@ export default function AddEditProjectModal({
         endDate: initialData.endDate || "",
         thumbnail: initialData.thumbnail || initialData.image || "",
         collaborators: initialData.collaborators || [],
+        // FIX: Explicitly default media to [] if missing to prevent "reading length of undefined" crash
+        media: initialData.media || [],
       };
       setFormData(startData);
       setInitialFormData(startData);
