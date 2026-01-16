@@ -1078,7 +1078,7 @@ const IntegrationSettings = ({ formData, currentUser, onUpdate }) => {
                   <InputGroup
                     label="GitHub Username"
                     name="username"
-                    placeholder="e.g. niviru"
+                    placeholder="e.g. Enter your username"
                     value={githubInputs.username}
                     required // Added
                     onChange={(e) =>

@@ -12,7 +12,7 @@ export const fetchUserRepositories = async (username, token) => {
   try {
     const headers = getAuthHeaders(token);
 
-    // 1. User Repos
+    // --- 1. Start fetching Personal Repositories ---
     const userReposPromise = axios.get(
       `https://api.github.com/users/${username}/repos`,
       {
@@ -25,43 +25,67 @@ export const fetchUserRepositories = async (username, token) => {
       }
     );
 
-    // 2. Org Repos
-    const orgReposPromise = axios.get(
-      `https://api.github.com/orgs/NIBM-HNDSE-Courseworks/repos`,
-      {
+    // --- 2. Dynamically Fetch User's Organizations ---
+    let orgReposPromises = [];
+    try {
+      // Get list of organizations the user is a member of
+      const orgsResponse = await axios.get("https://api.github.com/user/orgs", {
         headers,
-        params: {
-          sort: "updated",
-          per_page: 100,
-        },
-      }
-    );
+      });
 
-    const [userRes, orgRes] = await Promise.allSettled([
-      userReposPromise,
-      orgReposPromise,
-    ]);
-
-    const userRepos = userRes.status === "fulfilled" ? userRes.value.data : [];
-
-    if (orgRes.status === "rejected") {
-      console.warn("Org fetch failed (Check Token Scopes):", orgRes.reason);
+      // For every organization found, create a request to fetch its repos
+      orgReposPromises = orgsResponse.data.map((org) =>
+        axios.get(`https://api.github.com/orgs/${org.login}/repos`, {
+          headers,
+          params: {
+            sort: "updated",
+            per_page: 100,
+          },
+        })
+      );
+    } catch (err) {
+      console.warn(
+        "Failed to fetch organizations list (check 'read:org' scope)",
+        err
+      );
     }
-    const orgRepos = orgRes.status === "fulfilled" ? orgRes.value.data : [];
 
-    // 3. Merge
+    // --- 3. Wait for ALL requests (Personal + All Orgs) ---
+    // We combine the personal promise with the array of org promises
+    const allPromises = [userReposPromise, ...orgReposPromises];
+
+    const results = await Promise.allSettled(allPromises);
+
+    // --- 4. Process and Merge Results ---
+    const allRepos = [];
+
+    results.forEach((result) => {
+      if (result.status === "fulfilled") {
+        // result.value.data contains the array of repositories from one source
+        if (Array.isArray(result.value.data)) {
+          allRepos.push(...result.value.data);
+        }
+      } else {
+        console.warn("One of the repo fetch requests failed:", result.reason);
+      }
+    });
+
+    // --- 5. Deduplicate (Map by ID) ---
     const repoMap = new Map();
-    [...userRepos, ...orgRepos].forEach((repo) => {
+    allRepos.forEach((repo) => {
       repoMap.set(repo.id, repo);
     });
 
+    // --- 6. Return Clean Data ---
     return Array.from(repoMap.values()).map((repo) => ({
       id: repo.id,
-      name: repo.full_name,
+      name: repo.full_name, // e.g., "facebook/react" or "username/my-repo"
       html_url: repo.html_url,
       description: repo.description,
       language: repo.language,
       languages_url: repo.languages_url,
+      // Optional: Add owner info if you want to display org avatar
+      owner_avatar: repo.owner?.avatar_url,
     }));
   } catch (error) {
     console.error("GitHub Fetch Error:", error);
