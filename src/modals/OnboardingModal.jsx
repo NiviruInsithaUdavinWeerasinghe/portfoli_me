@@ -394,9 +394,13 @@ export default function OnboardingModal({ user, onComplete }) {
               </div>
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-white">Almost there!</h2>
+              <h2 className="text-2xl font-bold text-white">
+                {isExistingUser ? "New Feature Alert!" : "Almost there!"}
+              </h2>
               <p className="text-gray-400 text-sm">
-                Let's set up your professional profile.
+                {isExistingUser
+                  ? "Connect GitHub to auto-sync your projects."
+                  : "Let's set up your professional profile."}
               </p>
             </div>
           </div>

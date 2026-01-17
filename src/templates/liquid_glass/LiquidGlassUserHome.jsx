@@ -14,7 +14,10 @@ import {
   onSnapshot,
   doc,
   updateDoc,
-} from "firebase/firestore"; // Added updateDoc
+  query,
+  where,
+  collectionGroup,
+} from "firebase/firestore"; // Added query, where, collectionGroup
 import { db } from "../../lib/firebase";
 // --- NEW IMPORTS END ---
 import {
@@ -286,9 +289,36 @@ export default function LiquidGlassUserHome() {
         console.log("🚀 [DEBUG] Starting Project Load for UID:", targetUid);
 
         try {
-          const data = await getUserProjects(targetUid); // Use targetUid
-          console.log(`📂 [DEBUG] Projects fetched: ${data.length}`, data);
-          console.log(`📂 [DEBUG] Projects fetched: ${data.length}`, data);
+          // 1. Fetch Owned Projects
+          const ownedData = await getUserProjects(targetUid);
+          const ownedWithId = ownedData.map((p) => ({
+            ...p,
+            ownerId: targetUid, // Ensure ownerId is set
+          }));
+
+          // 2. Fetch Collaborated Projects (Group Query)
+          const qCollab = query(
+            collectionGroup(db, "projects"),
+            where("collaboratorIds", "array-contains", targetUid)
+          );
+          const collabSnapshot = await getDocs(qCollab);
+          const collabData = collabSnapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+            ownerId: doc.ref.parent.parent.id, // Capture actual owner UID for paths
+          }));
+
+          // 3. Merge & Deduplicate
+          const allProjects = [...ownedWithId, ...collabData];
+          // Deduplicate by ID just in case
+          const data = Array.from(
+            new Map(allProjects.map((p) => [p.id, p])).values()
+          );
+
+          console.log(
+            `📂 [DEBUG] Total Projects fetched: ${data.length}`,
+            data
+          );
 
           setProjects(data);
 
@@ -313,11 +343,11 @@ export default function LiquidGlassUserHome() {
 
           const commentCountsPromises = data.map(async (project) => {
             try {
-              // Use targetUid here too
+              // UPDATED: Use project.ownerId to find the correct path for Collab projects
               const commentsRef = collection(
                 db,
                 "users",
-                targetUid,
+                project.ownerId || targetUid,
                 "projects",
                 project.id,
                 "comments"
@@ -346,10 +376,18 @@ export default function LiquidGlassUserHome() {
 
           console.log("✅ [DEBUG] Final Total Comments Count:", totalComments);
 
+          // Filter to count only visible projects
+          // We check the 'hiddenBy' array directly to ensure accuracy
+          const visibleProjectsCount = data.filter((p) => {
+            const hiddenList = p.hiddenBy || [];
+            // If the current profile owner's ID is in the hiddenBy list, don't count it
+            return !hiddenList.includes(targetUid);
+          }).length;
+
           // Update State
           setDashboardStats((prev) => ({
             ...prev,
-            projectsCount: data.length,
+            projectsCount: visibleProjectsCount,
             appreciationCount: totalLikes,
             commentsCount: totalComments, // NOW UPDATED DYNAMICALLY
           }));

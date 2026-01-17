@@ -50,6 +50,7 @@ function Home() {
   const [publicProfiles, setPublicProfiles] = useState([]);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [searchQuery, setSearchQuery] = useState(""); // Added state for search
+  const [visibleCount, setVisibleCount] = useState(6); // Added for Show More functionality
   // Removed loginPromptId state
 
   const handleShowPortfolios = async () => {
@@ -848,111 +849,132 @@ function Home() {
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {publicProfiles.filter((p) => {
-                  const q = searchQuery.toLowerCase();
-                  return (
-                    p.displayName?.toLowerCase().includes(q) ||
-                    p.role?.toLowerCase().includes(q) ||
-                    p.bio?.toLowerCase().includes(q)
-                  );
-                }).length > 0 ? (
-                  publicProfiles
-                    .filter((p) => {
+              <div className="flex flex-col gap-8">
+                {/* Grid: Changed grid-cols-1 to grid-cols-2 for Mobile */}
+                <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                  {(() => {
+                    // Filter profiles first
+                    const filtered = publicProfiles.filter((p) => {
                       const q = searchQuery.toLowerCase();
                       return (
                         p.displayName?.toLowerCase().includes(q) ||
                         p.role?.toLowerCase().includes(q) ||
                         p.bio?.toLowerCase().includes(q)
                       );
-                    })
-                    .map((profile) => (
-                      <div
-                        key={profile.id}
-                        className="bg-[#0B1120] border border-white/10 rounded-2xl p-6 hover:border-orange-500/50 transition-all group flex flex-col items-center text-center"
-                      >
-                        <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-orange-500 to-amber-600 mb-4 shadow-lg">
-                          <img
-                            src={profile.photoURL || defaultAvatar2}
-                            alt={profile.displayName}
-                            onError={(e) => {
-                              e.target.onerror = null; // Prevent infinite loop if default also fails
-                              e.target.src = defaultAvatar2;
-                            }}
-                            className="w-full h-full rounded-full object-cover bg-[#020617]"
-                          />
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="col-span-full text-center text-gray-500 py-10">
+                          {searchQuery
+                            ? "No profiles match your search."
+                            : "No public profiles found yet."}
                         </div>
-                        <h3 className="text-xl font-bold text-white mb-1">
-                          {profile.displayName ||
-                            profile.name ||
-                            "Anonymous User"}
-                        </h3>
-                        <p className="text-sm text-orange-400 font-medium mb-4">
-                          {profile.role || "Creator"}
-                        </p>
-                        <p className="text-gray-400 text-sm mb-6 line-clamp-2 h-10">
-                          {profile.bio ||
-                            "This user hasn't added a bio yet, but their work speaks for itself."}
-                        </p>
-                        {/* Directly render the button without login checks */}
-                        <button
-                          onClick={async () => {
-                            // 1. Unique View Logic (Only runs if user is logged in to prevent errors)
-                            if (
-                              currentUser?.uid &&
-                              currentUser.uid !== profile.id
-                            ) {
-                              try {
-                                // Check if this user has already viewed this profile
-                                // We use a subcollection 'uniqueViews' to track IDs to prevent duplicates
-                                const viewRef = doc(
-                                  db,
-                                  "users",
-                                  profile.id,
-                                  "uniqueViews",
-                                  currentUser.uid
-                                );
-                                const viewSnap = await getDoc(viewRef);
+                      );
+                    }
 
-                                // Only increment if the view record does NOT exist
-                                if (!viewSnap.exists()) {
-                                  // A. Mark this user as having viewed
-                                  await setDoc(viewRef, {
-                                    timestamp: new Date(),
-                                    viewerId: currentUser.uid,
-                                  });
+                    // Slice based on visibleCount
+                    return (
+                      <>
+                        {filtered.slice(0, visibleCount).map((profile) => (
+                          <div
+                            key={profile.id}
+                            className="bg-[#0B1120] border border-white/10 rounded-2xl p-4 md:p-6 hover:border-orange-500/50 transition-all group flex flex-col items-center text-center"
+                          >
+                            <div className="w-16 h-16 md:w-24 md:h-24 rounded-full p-1 bg-gradient-to-tr from-orange-500 to-amber-600 mb-3 md:mb-4 shadow-lg">
+                              <img
+                                src={profile.photoURL || defaultAvatar2}
+                                alt={profile.displayName}
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = defaultAvatar2;
+                                }}
+                                className="w-full h-full rounded-full object-cover bg-[#020617]"
+                              />
+                            </div>
+                            <h3 className="text-lg md:text-xl font-bold text-white mb-1 truncate w-full">
+                              {profile.displayName ||
+                                profile.name ||
+                                "Anonymous"}
+                            </h3>
+                            <p className="text-xs md:text-sm text-orange-400 font-medium mb-2 md:mb-4 truncate w-full">
+                              {profile.role || "Creator"}
+                            </p>
+                            <p className="text-gray-400 text-xs md:text-sm mb-4 md:mb-6 line-clamp-2 h-8 md:h-10 w-full">
+                              {profile.bio || "No bio added yet."}
+                            </p>
 
-                                  // B. Increment the public counter
-                                  const userRef = doc(db, "users", profile.id);
-                                  await updateDoc(userRef, {
-                                    totalViews: increment(1),
-                                  });
+                            <button
+                              onClick={async () => {
+                                if (
+                                  currentUser?.uid &&
+                                  currentUser.uid !== profile.id
+                                ) {
+                                  try {
+                                    const viewRef = doc(
+                                      db,
+                                      "users",
+                                      profile.id,
+                                      "uniqueViews",
+                                      currentUser.uid
+                                    );
+                                    const viewSnap = await getDoc(viewRef);
+                                    if (!viewSnap.exists()) {
+                                      await setDoc(viewRef, {
+                                        timestamp: new Date(),
+                                        viewerId: currentUser.uid,
+                                      });
+                                      const userRef = doc(
+                                        db,
+                                        "users",
+                                        profile.id
+                                      );
+                                      await updateDoc(userRef, {
+                                        totalViews: increment(1),
+                                      });
+                                    }
+                                  } catch (err) {
+                                    console.error(
+                                      "Error updating unique views:",
+                                      err
+                                    );
+                                  }
                                 }
-                              } catch (err) {
-                                console.error(
-                                  "Error updating unique views:",
-                                  err
+                                const identifier =
+                                  profile.username || profile.uid;
+                                window.open(
+                                  `/${identifier}/overview`,
+                                  "_blank"
                                 );
+                              }}
+                              className="w-full py-2 md:py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-orange-600 hover:border-orange-600 text-white text-xs md:text-sm font-medium transition-all flex items-center justify-center gap-1 md:gap-2 group-hover:shadow-[0_0_15px_rgba(234,88,12,0.3)] animate-in fade-in zoom-in duration-300"
+                            >
+                              <span className="hidden md:inline">
+                                Open Portfolio
+                              </span>
+                              <span className="md:hidden">Open</span>
+                              <ArrowRight size={14} />
+                            </button>
+                          </div>
+                        ))}
+
+                        {/* Show More Button - Displayed if there are more items to show */}
+                        {filtered.length > visibleCount && (
+                          <div className="col-span-full flex justify-center mt-8">
+                            <button
+                              onClick={() =>
+                                setVisibleCount((prev) => prev + 6)
                               }
-                            }
-                            // 2. Open Portfolio
-                            const identifier = profile.username || profile.uid; // UPDATED: Use username if available
-                            window.open(`/${identifier}/overview`, "_blank");
-                          }}
-                          // UPDATED: Added animate-in classes here for smooth revert
-                          className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-orange-600 hover:border-orange-600 text-white font-medium transition-all flex items-center justify-center gap-2 group-hover:shadow-[0_0_15px_rgba(234,88,12,0.3)] animate-in fade-in zoom-in duration-300"
-                        >
-                          Open Portfolio <ArrowRight size={16} />
-                        </button>
-                      </div>
-                    ))
-                ) : (
-                  <div className="col-span-full text-center text-gray-500 py-10">
-                    {searchQuery
-                      ? "No profiles match your search."
-                      : "No public profiles found yet."}
-                  </div>
-                )}
+                              className="px-8 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-white font-semibold transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+                            >
+                              Show More <ChevronDown size={18} />
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
             )}
           </section>
