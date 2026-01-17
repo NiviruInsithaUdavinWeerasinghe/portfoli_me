@@ -181,6 +181,16 @@ export default function LiquidGlassUserProjects() {
     localStorage.setItem("project_view_mode", viewMode);
   }, [viewMode]);
 
+  // NEW: State for toggling visibility of hidden projects (Persisted)
+  const [showHidden, setShowHidden] = useState(() => {
+    const saved = localStorage.getItem("project_show_hidden");
+    return saved !== null ? JSON.parse(saved) : true; // Default to showing hidden for owner
+  });
+
+  useEffect(() => {
+    localStorage.setItem("project_show_hidden", JSON.stringify(showHidden));
+  }, [showHidden]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
 
@@ -464,8 +474,10 @@ export default function LiquidGlassUserProjects() {
         if (project.isHiddenOnThisProfile) {
           // If it is hidden, we check if we are the owner
           if (amIProfileOwner) {
-            // We are the owner, so we KEEP it (return true if other matches pass)
-            // We log this to confirm the logic ran
+            // NEW: Respect the toggle state
+            if (!showHidden) return false;
+
+            // We are the owner and toggle is ON, so we KEEP it
             console.log(
               `[${project.title}] is Hidden, but I am Owner. -> KEEPING.`
             );
@@ -487,6 +499,7 @@ export default function LiquidGlassUserProjects() {
     commentCounts,
     currentUser,
     targetUid,
+    showHidden, // Added dependency
   ]);
 
   if (loading)
@@ -537,6 +550,23 @@ export default function LiquidGlassUserProjects() {
                 size={18}
               />
             </div>
+
+            {/* NEW: Toggle Hidden Projects Button (Only for Owner) */}
+            {isOwner && (
+              <button
+                onClick={() => setShowHidden(!showHidden)}
+                title={
+                  showHidden ? "Hide hidden projects" : "Show hidden projects"
+                }
+                className={`p-2.5 rounded-xl border transition-all duration-300 ${
+                  showHidden
+                    ? "bg-orange-500/10 border-orange-500/50 text-orange-500 hover:bg-orange-500/20"
+                    : "bg-gray-900/40 border-white/10 text-gray-400 hover:text-white hover:border-white/30"
+                }`}
+              >
+                {showHidden ? <Eye size={18} /> : <EyeOff size={18} />}
+              </button>
+            )}
 
             <div className="flex items-center bg-gray-900/40 border border-white/10 rounded-xl p-1 w-fit">
               <button
