@@ -38,6 +38,7 @@ const CommentNode = ({
   comment,
   allComments,
   projectOwnerId,
+  collaborators = [], // NEW: Accept collaborators list
   currentUser,
   activeMenuId,
   setActiveMenuId,
@@ -63,6 +64,10 @@ const CommentNode = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   const isOwnerComment = comment.userId === projectOwnerId;
+  // NEW: Check if user is a collaborator (and not the owner)
+  const isCollaborator =
+    !isOwnerComment && collaborators?.some((c) => c.uid === comment.userId);
+
   const canReply = !!currentUser;
   // User can delete if they own the comment OR they own the project
   const canDelete =
@@ -94,15 +99,23 @@ const CommentNode = ({
             <img
               src={comment.userAvatar}
               alt={comment.userName}
+              // UPDATED: Added Border Logic for Collaborator (Blue) vs Owner (Orange)
               className={`w-8 h-8 rounded-full object-cover border-2 transition-all duration-300 group-hover:scale-105 ${
-                isOwnerComment ? "border-orange-500" : "border-white/10"
+                isOwnerComment
+                  ? "border-orange-500"
+                  : isCollaborator
+                  ? "border-blue-500"
+                  : "border-white/10"
               }`}
             />
           ) : (
             <div
+              // UPDATED: Added Background/Text Logic for Collaborator
               className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-300 group-hover:scale-105 ${
                 isOwnerComment
                   ? "bg-orange-500/10 text-orange-500 border-orange-500"
+                  : isCollaborator
+                  ? "bg-blue-500/10 text-blue-500 border-blue-500"
                   : "bg-white/10 text-white border-white/10"
               }`}
             >
@@ -115,8 +128,13 @@ const CommentNode = ({
           {/* Header: Name + Badge */}
           <div className="flex items-center gap-2 mb-1">
             <span
+              // UPDATED: Name Color Logic
               className={`text-sm font-bold truncate transition-colors duration-200 ${
-                isOwnerComment ? "text-orange-500" : "text-white"
+                isOwnerComment
+                  ? "text-orange-500"
+                  : isCollaborator
+                  ? "text-blue-500"
+                  : "text-white"
               }`}
             >
               {comment.userName}
@@ -126,11 +144,17 @@ const CommentNode = ({
                 Owner
               </span>
             )}
+            {/* NEW: Collaborator Badge */}
+            {isCollaborator && (
+              <span className="text-[10px] bg-blue-500/10 text-blue-500 border border-blue-500/20 px-1.5 rounded select-none">
+                Collaborator
+              </span>
+            )}
           </div>
 
           {/* Content Logic */}
           {deleteConfirmId === comment.id ? (
-            /* ... Delete Confirmation UI (Same as before) ... */
+            /* ... Delete Confirmation UI ... */
             <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-3 flex items-center justify-between animate-in zoom-in-95 fade-in duration-300 ease-out">
               <div className="flex items-center gap-2 text-red-400 text-xs font-bold">
                 <AlertTriangle size={14} />
@@ -152,7 +176,6 @@ const CommentNode = ({
               </div>
             </div>
           ) : isEditing ? (
-            // NEW: Edit Mode Input
             <div className="flex flex-col gap-2 w-full animate-in fade-in zoom-in-95 duration-200">
               <textarea
                 value={editText}
@@ -179,11 +202,14 @@ const CommentNode = ({
             // Normal Comment Bubble
             <div className="relative">
               <div
+                // UPDATED: Bubble Background Logic
                 className={`
                   p-3 rounded-2xl rounded-tl-none text-sm break-words leading-relaxed shadow-sm transition-colors duration-300
                   ${
                     isOwnerComment
                       ? "bg-gradient-to-br from-orange-500/20 to-orange-900/10 border border-orange-500/20 text-white"
+                      : isCollaborator
+                      ? "bg-gradient-to-br from-blue-500/20 to-blue-900/10 border border-blue-500/20 text-white"
                       : "bg-white/5 border border-white/5 text-gray-200 hover:bg-white/10 hover:border-white/10"
                   }
                 `}
@@ -202,7 +228,6 @@ const CommentNode = ({
                 ) : (
                   text
                 )}
-                {/* Optional: Show edited tag if you added editedAt to firebase */}
                 {comment.editedAt && (
                   <span className="text-[10px] text-gray-500 ml-2 italic">
                     (edited)
@@ -248,12 +273,11 @@ const CommentNode = ({
                         </button>
                       )}
 
-                      {/* NEW: Edit Button */}
                       {canEdit && (
                         <button
                           onClick={() => {
                             setEditingCommentId(comment.id);
-                            setEditText(comment.text); // Pre-fill text
+                            setEditText(comment.text);
                             setActiveMenuId(null);
                           }}
                           className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-300 hover:bg-white/5 hover:text-white transition-colors duration-200 text-left active:bg-white/10"
@@ -340,6 +364,7 @@ const CommentNode = ({
                       comment={child}
                       allComments={allComments}
                       projectOwnerId={projectOwnerId}
+                      collaborators={collaborators} // NEW: Pass recursively
                       currentUser={currentUser}
                       activeMenuId={activeMenuId}
                       setActiveMenuId={setActiveMenuId}
@@ -404,10 +429,8 @@ export default function ProjectCommentModal({
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // UPDATED: State for fetched DB photo
   const [dbPhotoURL, setDbPhotoURL] = useState(null);
 
-  // --- NEW: FETCH DB AVATAR FOR CURRENT USER ---
   useEffect(() => {
     const fetchUserAvatar = async () => {
       if (!currentUser?.uid) return;
@@ -439,6 +462,8 @@ export default function ProjectCommentModal({
 
   const commentsEndRef = useRef(null);
   const projectOwnerId = project?.ownerId;
+  // NEW: Extract Collaborators List
+  const collaborators = project?.collaborators || [];
 
   // Close menus on outside click
   useEffect(() => {
@@ -487,7 +512,6 @@ export default function ProjectCommentModal({
       await addProjectComment(projectOwnerId, project.id, {
         userId: currentUser.uid,
         userName: currentUser.displayName || "User",
-        // UPDATED: Use dbPhotoURL if available, fallback to auth photo
         userAvatar: dbPhotoURL || currentUser.photoURL,
         text: newComment,
       });
@@ -512,7 +536,6 @@ export default function ProjectCommentModal({
         text: replyText,
         userId: currentUser.uid,
         userName: currentUser.displayName || "User",
-        // UPDATED: Use dbPhotoURL if available
         userAvatar: dbPhotoURL || currentUser.photoURL,
         text: replyText,
       });
@@ -528,15 +551,12 @@ export default function ProjectCommentModal({
       await deleteProjectComment(projectOwnerId, project.id, commentId);
       setDeleteConfirmId(null);
 
-      // NEW: Auto-navigate back if this was the last comment in the thread
+      // Auto-navigate back if this was the last comment in the thread
       if (navStack.length > 0) {
         const currentRoot = navStack[navStack.length - 1];
-        // Check comments in current view using the existing 'comments' state closure
         const commentsInView = comments.filter(
           (c) => c.parentId === currentRoot.id
         );
-
-        // If the deleted comment was the only one in this view, go back
         if (commentsInView.length === 1 && commentsInView[0].id === commentId) {
           setNavStack((prev) => prev.slice(0, -1));
         }
@@ -546,7 +566,6 @@ export default function ProjectCommentModal({
     }
   };
 
-  // NEW: Handle Edit Submit
   const handleEditSubmit = async (commentId) => {
     if (!editText.trim() || !projectOwnerId) return;
     try {
@@ -572,7 +591,6 @@ export default function ProjectCommentModal({
     setNavStack((prev) => prev.slice(0, -1));
   };
 
-  // Custom Close Handler: Resets thread view on close
   const handleModalClose = () => {
     setNavStack([]);
     onClose();
@@ -692,6 +710,7 @@ export default function ProjectCommentModal({
                 comment={comment}
                 allComments={comments}
                 projectOwnerId={projectOwnerId}
+                collaborators={collaborators} // NEW: Pass collaborators here
                 currentUser={currentUser}
                 activeMenuId={activeMenuId}
                 setActiveMenuId={setActiveMenuId}
